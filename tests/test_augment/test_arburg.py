@@ -72,10 +72,26 @@ def arburg_slow(
 
 @pytest.mark.parametrize(
     "x_type",
-    ["numpy", "array", "pandas"],
+    [
+        "numpy",
+        "list",
+        "nested_list",
+        "tuple",
+        "nested_tuple",
+        "pyarray",
+        "pandas",
+    ],
 )
 def test_arburg_single_segment_against_matlab(
-    x_type: Literal["numpy", "array", "pandas"],
+    x_type: Literal[
+        "numpy",
+        "list",
+        "nested_list",
+        "tuple",
+        "nested_tuple",
+        "pyarray",
+        "pandas",
+    ],
 ) -> None:
     """
     This test checks the autoregressive model estimation via the Burg method for a
@@ -114,7 +130,15 @@ def test_arburg_single_segment_against_matlab(
     # the data is converted to the desired type
     if x_type == "numpy":
         pass
-    elif x_type == "array":
+    elif x_type == "list":
+        x = x.tolist()  # type: ignore
+    elif x_type == "nested_list":
+        x = [x.tolist()]  # type: ignore
+    elif x_type == "tuple":
+        x = tuple(x.tolist())  # type: ignore
+    elif x_type == "nested_tuple":
+        x = (tuple(x.tolist()),)  # type: ignore
+    elif x_type == "pyarray":
         x = array("d", x.tolist())  # type: ignore
     elif x_type == "pandas":
         x = pd.Series(x)

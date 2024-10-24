@@ -19,7 +19,7 @@ __all__ = [
 
 # === Imports ===
 
-from typing import List, Optional, Set, Tuple, Union
+from typing import List, Optional, Tuple, Union
 from warnings import warn
 
 import numpy as np
@@ -40,7 +40,7 @@ from ._numpy_base import extrapolate_autoregressive as numpy_extrapolate_autoreg
 
 
 def _prepare_x_segments_for_ar_fit(
-    xs: Union[ArrayLike, List[ArrayLike], Tuple[ArrayLike, ...], Set[ArrayLike]]
+    xs: Union[ArrayLike, List[ArrayLike], Tuple[ArrayLike, ...]]
 ) -> Tuple[NDArray[np.float64], NDArray[np.int64]]:
     """
     Prepares the input signal segments for the autoregressive model estimation by
@@ -51,7 +51,7 @@ def _prepare_x_segments_for_ar_fit(
 
     Parameters
     ----------
-    xs : Array-like of shape (n,) or Iterable of Array-like of shape (n_i,)
+    xs : Array-like of shape (n,) or (m, n) or list or tuple of (n_i,)-Array-likes
         The real input signal (segments) for which the AR coefficients are to be
         computed.
         For details, see the docstring of, e.g., :func:`arburg`.
@@ -67,8 +67,38 @@ def _prepare_x_segments_for_ar_fit(
 
     """  # noqa: E501
 
-    if not isinstance(xs, (list, tuple, set)):
-        xs = (xs,)
+    # the conversion to an iterable for the actual validation depends on the type of
+    # ``xs``
+    # first, an attempt is made to convert the input to an at-least-1D NumPy Array
+    try:
+        xs = np.atleast_1d(np.asarray(xs, dtype=np.float64))
+    except ValueError:
+        pass
+
+    # now, the more specific type-based validation is performed
+    # Case 1: xs is now a NumPy-1D-Array
+    if isinstance(xs, np.ndarray):
+        # empty Arrays are invalid
+        if xs.size < 1:
+            raise ValueError("If provided as an Array-Like, 'xs' has to be non-empty.")
+
+        if xs.ndim not in (1, 2):
+            raise ValueError(
+                f"If provided as an Array-Like, 'xs' has to be 1D or 2D, but is of "
+                f"dimension {xs.ndim}."
+            )
+
+        if xs.ndim == 1:
+            xs = (xs,)
+
+    # Case 2: xs is not a list or tuple of Array-likes of inconsistent size, i.e., it
+    #         is not a supported type
+    elif not isinstance(xs, (list, tuple)):
+        x_type_name = f"{type(xs)}"[7:-1]  # removes the "<class '" and "'>" parts
+        raise ValueError(
+            f"Expected 'xs' to be an Array-like or a list or tuple of Array-likes, "
+            f"but got an object of type {x_type_name}."
+        )
 
     xs = tuple(
         get_validated_real_numeric_1d_array_like(
@@ -78,7 +108,7 @@ def _prepare_x_segments_for_ar_fit(
             max_size=None,
             output_dtype=np.float64,
         )
-        for index, x in enumerate(xs)
+        for index, x in enumerate(xs)  # type: ignore
     )
 
     x_lens = np.array([x.size for x in xs], dtype=np.int64)
@@ -88,8 +118,8 @@ def _prepare_x_segments_for_ar_fit(
         shape=(len(xs), np.max(x_lens)),
         dtype=np.float64,
     )
-    for index, x in enumerate(xs):
-        xs_packaged[index, 0 : x_lens[index]] = x
+    for index, (segment, segment_len) in enumerate(zip(xs, x_lens)):
+        xs_packaged[index, 0:segment_len] = segment
 
     return xs_packaged, x_lens
 
@@ -98,7 +128,7 @@ def _prepare_x_segments_for_ar_fit(
 
 
 def arburg(
-    xs: Union[ArrayLike, List[ArrayLike], Tuple[ArrayLike, ...], Set[ArrayLike]],
+    xs: Union[ArrayLike, List[ArrayLike], Tuple[ArrayLike, ...]],
     order: Integer = 1,
     tikhonov_lambda: Optional[RealNumeric] = None,
     jit: bool = True,
@@ -110,9 +140,10 @@ def arburg(
 
     Parameters
     ----------
-    xs : Array-like of shape (n,) or Iterable of Array-like of shape (n_i,)
+    xs : Array-like of shape (n,) or (m, n) or list or tuple of (n_i,)-Array-likes
         The real input signal (segments) for which the AR coefficients are to be
         computed.
+        2D-ArrayLikes are interpreted as row-wise stacked segments.
         If multiple segments are provided, they are treated as individual segments of
         a single signal and the resulting AR model will minimise the forward and
         backward prediction errors over all segments combined. However, this does not
@@ -147,6 +178,8 @@ def arburg(
     ------
     TypeError
         If ``xs``, ``order``, or ``tikhonov_lambda`` are not of the expected type.
+    ValueError
+        If ``xs`` is an empty Array-like.
     ValueError
         If ``xs``is not a real numeric 1D Array-like or iterable of real numeric 1D
         Array-likes with the expected size.

@@ -16,13 +16,27 @@ __all__ = [
 # === Imports ===
 
 import operator
-from typing import Any, Literal, Optional, Tuple, Type, TypeVar
+from enum import IntEnum
+from typing import Any, Optional, Tuple, Type, TypeVar
 
 import numpy as np
 
 # === Types ===
 
 ValueType = TypeVar("ValueType", int, float)
+
+# === Models ===
+
+
+class _BoundKind(IntEnum):
+    """
+    The kinds of bounds for comparisons.
+
+    """
+
+    LOW = 0
+    UPPER = 1
+
 
 # === Auxiliary Functions ===
 
@@ -72,7 +86,7 @@ def _convert_to_validated_type(
 
     # if the value is neither of the output type nor one of the allowed types, an error
     # is raised
-    # NOTE: the following slices [7:-1] removes the "<class ...>" part
+    # NOTE: the following slices [7:-1] # removes the "<class '" and "'>" parts
     allowed_types_names = f"{output_type}"[7:-1]
     allowed_types_names += " / "
     allowed_types_names += " / ".join([f"{atp}"[7:-1] for atp in allowed_from_types])
@@ -86,7 +100,7 @@ def _get_bound_validated_value(
     value: ValueType,
     name: str,
     bound: Optional[ValueType] = None,
-    bound_kind: Literal["low", "high"] = "low",
+    bound_kind: _BoundKind = _BoundKind.LOW,
     clip: bool = False,
 ) -> ValueType:
     """
@@ -102,17 +116,16 @@ def _get_bound_validated_value(
     bound : :class:`float` or :class:`int` or ``None``, default=``None``
         The bound to compare against.
         If ``None``, no comparison is performed.
-    bound_kind : :class:`str`, default=``"low"``
-        The bound kind to compare against which can be either ``"low"`` for a lower
-        or ``"high"`` for an upper bound.
+    bound_kind : :class:`_BoundKind`, default=``_BoundKind.LOW``
+        The bound kind to compare against, i.e., either the lower or upper bound.
     clip : :class:`bool`, default=``False``
         Whether to clip the ``value`` to the `bound`` if the comparison is not
         satisfied.
         For
 
-        - ``bound_kind="low"``, the conversion is
+        - ``bound_kind=_BoundKind.LOW``, the conversion is
             ``value = max(value, bound)``
-        - ``bound_kind="high"``, the conversion is
+        - ``bound_kind=_BoundKind.UPPER``, the conversion is
             ``value = min(value, bound)``.
 
     Returns
@@ -132,7 +145,7 @@ def _get_bound_validated_value(
         return value
 
     # the comparison operator, clip function, and message string are determined
-    if bound_kind == "low":
+    if bound_kind == _BoundKind.LOW:
         comparison_operator = operator.ge
         comparison_str = ">="
         clipper = max
@@ -222,7 +235,10 @@ def _get_validated_scalar(
 
     # afterwards, the value is checked to be within the allowed range and clipped if
     # necessary and enabled
-    for bound, bound_kind in [(min_value, "low"), (max_value, "high")]:
+    for bound, bound_kind in [
+        (min_value, _BoundKind.LOW),
+        (max_value, _BoundKind.UPPER),
+    ]:
         value = _get_bound_validated_value(
             value=value,
             name=name,
@@ -343,7 +359,6 @@ def get_validated_real_numeric_1d_array_like(
     min_size: Optional[int] = None,
     max_size: Optional[int] = None,
     output_dtype: Optional[Type] = None,
-    copy: bool = False,
 ) -> np.ndarray:
     """
     Checks if a value is a 1D Array-like of real numeric values and returns it as a
@@ -358,8 +373,9 @@ def get_validated_real_numeric_1d_array_like(
     min_size, max_size : :class:`int` or ``None``, default=``None``
         The minimum and maximum allowed size of the 1D Array-like.
         If ``None``, the size is not checked against the respective bound.
+        Arrays of size 0 will always be considered invalid.
     output_dtype : :class:`type` or ``None``, default=``None``
-        The data type of the output NumPy array.
+        The data type of the output NumPy Array.
         If ``None``, the data type is not changed.
 
     Returns
@@ -369,23 +385,41 @@ def get_validated_real_numeric_1d_array_like(
 
     Raises
     ------
-    TypeError
-        If ``value`` does not contain only real numeric values.
+    ValueError
+        If ``value`` is not or cannot be converted to a 1D NumPy Array.
+    ValueError
+        If ``value`` is an empty Array.
     ValueError
         If ``value`` is not a 1D Array-like.
     ValueError
         If ``min_size <= value.size <= max_size`` is not fulfilled.
+    TypeError
+        If ``value`` does not contain only real numeric values.
 
     """
 
-    # first, the value is converted to a NumPy array
-    value_array = np.atleast_1d(value)
+    # first, the value is converted to a NumPy Array
+    # NOTE: the case of the value being a NumPy Array is handled first to avoid
+    #       unnecessary overhead
+    if isinstance(value, np.ndarray):
+        value_array = value
+    else:
+        try:
+            value_array = np.atleast_1d(value)
+        except Exception as err:
+            raise ValueError(
+                f"'{name}' could not be converted to a NumPy Array-like"
+            ) from err
 
-    # then, the value is checked to be a 1D array
+    # empty Arrays are considered invalid
+    if value_array.size < 1:
+        raise ValueError(f"Expected '{name}' to be a non-empty Array-like.")
+
+    # then, the value is checked to be a 1D Array
     if value_array.ndim != 1:
         raise ValueError(
-            f"Expected '{name}' to be a 1D Array-like, but got a {value_array.ndim}D "
-            f"Array."
+            f"Expected '{name}' to be a 1D Array-like, but got a "
+            f"{value_array.ndim}D Array of shape {value_array.shape}."
         )
 
     # if a size is provided, the value is checked to have the expected size
@@ -399,7 +433,7 @@ def get_validated_real_numeric_1d_array_like(
                 f"but got a size of {value_array.size}."
             )
 
-    # afterwards, the value is checked to be a 1D array of real numeric values
+    # afterwards, the value is checked to be a 1D Array of real numeric values
     if not np.isreal(value_array).all():
         raise TypeError(
             f"Expected '{name}' to be a 1D Array-like of real numeric values, but got "
