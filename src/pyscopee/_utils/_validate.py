@@ -419,7 +419,7 @@ def get_validated_real_numeric_1d_array_like(
     if value_array.ndim != 1:
         raise ValueError(
             f"Expected '{name}' to be a 1D Array-like, but got a "
-            f"{value_array.ndim}D Array of shape {value_array.shape}."
+            f"{value_array.ndim}D Array-like of shape {value_array.shape}."
         )
 
     # if a size is provided, the value is checked to have the expected size
@@ -443,6 +443,12 @@ def get_validated_real_numeric_1d_array_like(
     # if a new data type is provided, the value is converted to this data type
     if output_dtype is not None:
         if output_dtype != value_array.dtype:
-            value_array = value_array.astype(output_dtype)
+            try:
+                value_array = value_array.astype(output_dtype)
+            except Exception as err:
+                raise TypeError(
+                    f"Could not convert '{name}' from a '{value_array.dtype}'- to a "
+                    f"'{output_dtype}'-Array."
+                ) from err
 
     return value_array

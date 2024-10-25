@@ -6,12 +6,16 @@ This test suite implements all tests for the module :mod:`pyscopee._utils.valida
 # === Imports ===
 
 from math import isclose as pyisclose
-from typing import Any, Optional, Union
+from typing import Any, Optional, Type, Union
 
 import numpy as np
 import pytest
 
-from pyscopee._utils import get_validated_integer, get_validated_real_numeric
+from pyscopee._utils import (
+    get_validated_integer,
+    get_validated_real_numeric,
+    get_validated_real_numeric_1d_array_like,
+)
 
 # === Tests ===
 
@@ -776,6 +780,189 @@ def test_real_numeric_validation(
         expected,
         abs_tol=1e-15,
         rel_tol=1e-15,
+    )
+
+    return
+
+
+@pytest.mark.parametrize(
+    "value, min_size, max_size, output_dtype, expected",
+    [
+        (  # 0) a NumPy Array without any constraints
+            np.array([1.0]),
+            None,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 1) a NumPy Array with a satisfied minimum size
+            np.array([1.0]),
+            1,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 2) a NumPy Array with a violated minimum size
+            np.array([1.0]),
+            2,
+            None,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and None, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 3) a NumPy Array with a satisfied maximum size
+            np.array([1.0]),
+            None,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 4) a NumPy Array with a violated maximum size
+            np.array([1.0]),
+            None,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between None and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 5) a NumPy Array with a satisfied size range
+            np.array([1.0]),
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 6) a NumPy Array with a violated size range
+            np.array([1.0]),
+            2,
+            2,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 2, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 7) a NumPy Array with a satisfied minimum size and a violated maximum size
+            np.array([1.0]),
+            1,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 1 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 8) a NumPy Array with a violated minimum size and a satisfied maximum size
+            np.array([1.0]),
+            2,
+            1,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 1, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 9) a NumPy Array with a satisfied minimum size and a satisfied maximum size
+            np.array([1.0]),
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 10) a NumPy Array with a violated minimum size and a violated maximum size
+            np.array([1.0]),
+            2,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 11) a NumPy Array with a valid type conversion
+            np.array([1.0]),
+            None,
+            None,
+            np.int64,
+            np.array([1], dtype=np.int64),
+        ),
+        (  # 12) a NumPy Array with an invalid type conversion
+            np.array([1], dtype=np.int64),
+            None,
+            None,
+            np.float32,
+            ValueError(
+
+        (  # 13) an empty NumPy Array without any constraints
+            np.array([]),
+            None,
+            None,
+            None,
+            ValueError("Expected 'value' to be a non-empty Array-like."),
+        ),
+        (  # 14) a 2D NumPy Array without any constraints
+            np.array([[1.0]]),
+            None,
+            None,
+            None,
+            ValueError(
+                "Expected 'value' to be a 1D Array-like, but got a 2D Array-like of "
+                "shape (1, 1)."
+            ),
+        ),
+    ],
+)
+def test_real_numeric_1d_array_like_validation(
+    value: np.ndarray,
+    min_size: Optional[int],
+    max_size: Optional[int],
+    output_dtype: Optional[Type],
+    expected: Union[np.ndarray, Exception],
+) -> None:
+    """
+    Tests the function :func:`get_validated_real_numeric_1d_array_like` for various
+    input values for
+
+    - passing for correct input values
+    - raising exceptions for incorrect input values
+
+    """
+
+    # if an exception should be raised, the function is called and the exception is
+    # checked
+    if isinstance(expected, Exception):
+        with pytest.raises(type(expected), match=str(expected)):
+            checked_value = get_validated_real_numeric_1d_array_like(
+                value=value,
+                name="value",
+                min_size=min_size,
+                max_size=max_size,
+            )
+
+        return
+
+    # if no exception should be raised, the function is called and the output is checked
+    checked_value = get_validated_real_numeric_1d_array_like(
+        value=value,
+        name="value",
+        min_size=min_size,
+        max_size=max_size,
+    )
+
+    if output_dtype is not None:
+        assert checked_value.dtype == output_dtype
+    else:
+        assert checked_value.dtype == value.dtype
+
+    assert np.allclose(
+        checked_value,
+        expected,
+        atol=1e-15,
+        rtol=1e-15,
     )
 
     return
