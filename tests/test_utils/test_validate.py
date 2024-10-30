@@ -1455,6 +1455,53 @@ def test_real_numeric_validation(
                 r"shape \(1, 1\)."
             ),
         ),
+        (  # 75) a Python lists of lists with inconsistent sizes
+            [[1.0], [2.0, 3.0]],
+            None,
+            None,
+            None,
+            ValueError("'value' could not be converted to a NumPy Array-like."),
+        ),
+        (  # 76) a NumPy Array of complex values
+            np.array([1.0 + 1.0j]),
+            None,
+            None,
+            None,
+            TypeError(
+                "Expected 'value' to be a 1D Array-like of real numeric values, but "
+                "got a 1D Array-like with non-real numeric values."
+            ),
+        ),
+        (  # 77) a Python List of complex values
+            [1.0 + 1.0j],
+            None,
+            None,
+            None,
+            TypeError(
+                "Expected 'value' to be a 1D Array-like of real numeric values, but "
+                "got a 1D Array-like with non-real numeric values."
+            ),
+        ),
+        (  # 78) a Python Tuple of complex values
+            (1.0 + 1.0j,),
+            None,
+            None,
+            None,
+            TypeError(
+                "Expected 'value' to be a 1D Array-like of real numeric values, but "
+                "got a 1D Array-like with non-real numeric values."
+            ),
+        ),
+        (  # 79) a Pandas Series of complex values
+            pd.Series([1.0 + 1.0j]),
+            None,
+            None,
+            None,
+            TypeError(
+                "Expected 'value' to be a 1D Array-like of real numeric values, but "
+                "got a 1D Array-like with non-real numeric values."
+            ),
+        ),
     ],
 )
 def test_real_numeric_1d_array_like_validation(

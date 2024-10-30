@@ -409,7 +409,7 @@ def get_validated_real_numeric_1d_array_like(
             value_array = np.atleast_1d(value)
         except Exception as err:
             raise ValueError(
-                f"'{name}' could not be converted to a NumPy Array-like"
+                f"'{name}' could not be converted to a NumPy Array-like."
             ) from err
 
     # empty Arrays are considered invalid
