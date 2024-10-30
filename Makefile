@@ -17,51 +17,51 @@ install: upgrade-pip
 	@echo Installing the required dependencies and building the package ...
 	python -m pip install --upgrade .
 
-.PHONY: install-dev
-install-dev: upgrade-pip
+.PHONY: install.dev
+install.dev: upgrade-pip
 	@echo Installing the required dependencies and building the package for development ...
 	python -m pip install --upgrade .["dev"]
 
-.PHONY: install-ci
-install-ci: upgrade-pip
+.PHONY: install.ci
+install.ci: upgrade-pip
 	@echo Installing the required dependencies for CI ...
 	python -m pip install --upgrade .["git_ci"]
 
 # === Source File Checks ===
 
 # black format checking
-.PHONY: black-check
-black-check:
+.PHONY: check.black
+check.black:
 	@echo Checking code formatting with 'black' ...
 	black --check --diff --color $(SRC_DIRS)
 
 # isort import checking
-.PHONY: isort-check
-isort-check:
+.PHONY: check.isort
+check.isort:
 	@echo Checking import sorting with 'isort' ...
 	isort --check --diff --color $(SRC_DIRS)
 
 # pyright static type checking
-.PHONY: pyright-check
-pyright-check:
+.PHONY: check.pyright
+check.pyright:
 	@echo Checking types statically with 'pyright' ...
 	pyright $(SRC_DIRS)
 
 # mypy static type checking
-.PHONY: mypy-check
-mypy-check:
+.PHONY: check.mypy
+check.mypy:
 	@echo Checking types statically with 'mypy' ...
 	mypy $(SRC_DIRS)
 
 # pycodestyle style checking
-.PHONY: pycodestyle-check
-pycodestyle-check:
+.PHONY: check.pycodestyle
+check.pycodestyle:
 	@echo Checking code style with 'pycodestyle' ...
 	pycodestyle $(SRC_DIRS) --max-line-length=88 --ignore=E203,W503,E704
 
 # ruff lint checking
-.PHONY: ruff-check
-ruff-check:
+.PHONY: check.ruff
+check.ruff:
 	@echo Checking code style with 'ruff' ...
 	ruff check $(SRC_DIRS)
 
@@ -84,12 +84,17 @@ test-parallel:
 	pytest -k "$(TEST)" -n="auto" -x
 
 # Running the tests
-.PHONY: test-htmlcov
-test-htmlcov:
+.PHONY: tests
+tests:
+	@echo Running the tests with pytest ...
+	pytest ./tests -n="auto" -x --no-jit
+
+.PHONY: tests.htmlcov
+tests.htmlcov:
 	@echo Running the tests with HTML coverage report ...
 	pytest --cov=pyscopee ./tests -n="auto" --cov-report=html -x --no-jit
 
-.PHONY: test-xmlcov
-test-xmlcov:
+.PHONY: tests.xmlcov
+tests.xmlcov:
 	@echo Running the tests with XML coverage report ...
 	pytest --cov=pyscopee ./tests -n="auto" --cov-report=xml -x --no-jit
