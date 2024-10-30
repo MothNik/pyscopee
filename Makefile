@@ -67,7 +67,7 @@ check.ruff:
 
 # All checks combined
 .PHONY: check
-check: black-check isort-check pyright-check mypy-check pycodestyle-check ruff-check
+check: check.black check.isort check.pyright check.mypy check.pycodestyle check.ruff
 
 # === Test Commands ===
 
