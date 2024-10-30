@@ -1,5 +1,5 @@
 """
-Mod :mod:`_utils.types`
+Mod :mod:`_utils._custom_types`
 
 This module provides type definitions used across the ``pyscopee`` package.
 
