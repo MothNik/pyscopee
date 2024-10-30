@@ -8,7 +8,7 @@ as the independent variable.
 
 # === Imports ===
 
-from typing import Tuple, Union, overload
+from typing import Tuple
 
 import numpy as np
 
@@ -37,27 +37,11 @@ _PEAK_WAVENUMBER_SLOPE = 2.821439372  # dimensionless
 # === Functions ===
 
 
-@overload
-def black_body_spectrum(
-    wavenumbers: RealNumeric,
-    temperature: RealNumeric,
-    temperature_unit: TemperatureUnit = "K",
-) -> float: ...
-
-
-@overload
 def black_body_spectrum(
     wavenumbers: RealNumericArrayLike,
     temperature: RealNumeric,
     temperature_unit: TemperatureUnit = "K",
-) -> np.ndarray: ...
-
-
-def black_body_spectrum(
-    wavenumbers: RealNumericArrayLike,
-    temperature: RealNumeric,
-    temperature_unit: TemperatureUnit = "K",
-) -> Union[float, np.ndarray]:
+) -> np.ndarray:
     """
     Computes the Planck blackbody radiation spectrum for a given temperature and
     wavenumbers.
@@ -77,11 +61,10 @@ def black_body_spectrum(
 
     Returns
     -------
-    black_body_spectrum : :class:`float` or :class:`numpy.ndarray` of shape (n,)
+    black_body_spectrum : :class:`numpy.ndarray` of shape (1,) or (n,)
         The blackbody radiation spectrum in W * cm / (m² * sr) evaluated at the
         specified ``wavenumbers``.
-        It will be a scalar if the input ``wavenumbers`` was a scalar and a NumPy
-        Array otherwise.
+        It will be an Array even if ``wavenumbers`` was a scalar.
 
     Raises
     ------
@@ -117,14 +100,12 @@ def black_body_spectrum(
 
     # --- Computation ---
 
-    black_body_spectrum = (
-        (2.0 * 1e8 * _PLANCK_CONSTANT * _SPEED_OF_LIGHT * _SPEED_OF_LIGHT)
+    return (
+        (2e8 * _PLANCK_CONSTANT * _SPEED_OF_LIGHT * _SPEED_OF_LIGHT)
         * wavenumbers
         * wavenumbers
         * wavenumbers
-    )
-
-    black_body_spectrum /= (
+    ) / (
         np.exp(
             (
                 (_PLANCK_CONSTANT * _SPEED_OF_LIGHT * 100.0)
@@ -134,13 +115,6 @@ def black_body_spectrum(
         )
         - 1.0
     )
-
-    # if the wavenumbers were a scalar, the result is converted to a scalar
-    if np.isscalar(wavenumbers):
-        return float(black_body_spectrum)
-
-    # for Array-like wavenumbers, the result is returned as a NumPy Array
-    return black_body_spectrum
 
 
 def black_body_peak(
@@ -210,4 +184,4 @@ def black_body_peak(
         temperature_unit="K",
     )
 
-    return black_body_peak_wavenumber, black_body_peak_intensity
+    return black_body_peak_wavenumber, float(black_body_peak_intensity[0])

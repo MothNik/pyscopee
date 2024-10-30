@@ -12,10 +12,8 @@ optional dependency ``radis``.
 # === Imports ===
 
 import warnings
-from typing import Union, overload
 
 import numpy as np
-from numpy.typing import ArrayLike
 from scipy.interpolate import splev, splrep
 
 from .._utils import (
@@ -37,42 +35,6 @@ from ._validated_conversion import (
 # === Functions ===
 
 
-@overload
-def calc_atmospheric_transmittance(
-    wavenumbers: RealNumeric,
-    temperature: RealNumeric = 25.0,
-    temperature_unit: TemperatureUnit = "C",
-    pressure: RealNumeric = 1.0,
-    pressure_unit: PressureUnit = "atm",
-    h2o_mole_fraction: RealNumeric = 20_000.0,
-    h2o_unit: GasConcentrationUnit = "ppmv",
-    co2_mole_fraction: RealNumeric = 420.0,
-    co2_unit: GasConcentrationUnit = "ppmv",
-    path_length: RealNumeric = 25.0,
-    path_length_unit: PathlengthUnit = "cm",
-    verbose: bool = False,
-    **kwargs,
-) -> float: ...
-
-
-@overload
-def calc_atmospheric_transmittance(
-    wavenumbers: ArrayLike,
-    temperature: RealNumeric = 25.0,
-    temperature_unit: TemperatureUnit = "C",
-    pressure: RealNumeric = 1.0,
-    pressure_unit: PressureUnit = "atm",
-    h2o_mole_fraction: RealNumeric = 20_000.0,
-    h2o_unit: GasConcentrationUnit = "ppmv",
-    co2_mole_fraction: RealNumeric = 420.0,
-    co2_unit: GasConcentrationUnit = "ppmv",
-    path_length: RealNumeric = 25.0,
-    path_length_unit: PathlengthUnit = "cm",
-    verbose: bool = False,
-    **kwargs,
-) -> np.ndarray: ...
-
-
 def calc_atmospheric_transmittance(
     wavenumbers: RealNumericArrayLike,
     temperature: RealNumeric = 25.0,
@@ -87,7 +49,7 @@ def calc_atmospheric_transmittance(
     path_length_unit: PathlengthUnit = "cm",
     verbose: bool = False,
     **kwargs,
-) -> Union[float, np.ndarray]:
+) -> np.ndarray:
     """
     Calculates the atmospheric transmittance for the given wavenumbers assuming that
     the atmosphere consists of air, water vapour, and carbon dioxide.
@@ -144,11 +106,10 @@ def calc_atmospheric_transmittance(
 
     Returns
     -------
-    atmospheric_transmittance : :class:`float` or :class:`numpy.ndarray` of shape (n,)
+    atmospheric_transmittance : :class:`numpy.ndarray` of shape (1,) or (n,)
         The atmospheric transmittance for the given wavenumbers as a dimensionless
         quantity from ``0.0`` to ``1.0``.
-        It will be a scalar if the input ``wavenumbers`` was a scalar and a NumPy
-        Array otherwise.
+        It will be an Array even if ``wavenumbers`` was a scalar.
 
     Raises
     ------
@@ -258,14 +219,7 @@ def calc_atmospheric_transmittance(
         s=0.0,
     )
 
-    atmospheric_transmittance = splev(
-        wavenumbers,
-        tck,
+    return splev(  # type: ignore
+        x=wavenumbers,
+        tck=tck,
     )
-
-    # if the wavenumbers were a scalar, the result is converted to a scalar
-    if np.isscalar(wavenumbers):
-        return float(atmospheric_transmittance)  # type: ignore
-
-    # for Array-like wavenumbers, the result is returned as a NumPy Array
-    return atmospheric_transmittance  # type: ignore
