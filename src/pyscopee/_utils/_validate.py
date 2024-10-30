@@ -377,6 +377,7 @@ def get_validated_real_numeric_1d_array_like(
     output_dtype : :class:`type` or ``None``, default=``None``
         The data type of the output NumPy Array.
         If ``None``, the data type is not changed.
+        The conversion is done with ``value.astype(output_dtype, casting="safe")``.
 
     Returns
     -------
@@ -444,11 +445,11 @@ def get_validated_real_numeric_1d_array_like(
     if output_dtype is not None:
         if output_dtype != value_array.dtype:
             try:
-                value_array = value_array.astype(output_dtype)
+                value_array = value_array.astype(output_dtype, casting="safe")
             except Exception as err:
                 raise TypeError(
                     f"Could not convert '{name}' from a '{value_array.dtype}'- to a "
-                    f"'{output_dtype}'-Array."
+                    f"'{output_dtype.__name__}'-Array (uses 'safe' casting)."
                 ) from err
 
     return value_array

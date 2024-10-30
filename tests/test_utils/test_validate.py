@@ -5,10 +5,12 @@ This test suite implements all tests for the module :mod:`pyscopee._utils.valida
 
 # === Imports ===
 
+from array import array
 from math import isclose as pyisclose
 from typing import Any, Optional, Type, Union
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from pyscopee._utils import (
@@ -829,14 +831,14 @@ def test_real_numeric_validation(
                 "a size of 1."
             ),
         ),
-        (  # 5) a NumPy Array with a satisfied size range
+        (  # 5) a NumPy Array with a satisfied fixed size
             np.array([1.0]),
             1,
             1,
             None,
             np.array([1.0]),
         ),
-        (  # 6) a NumPy Array with a violated size range
+        (  # 6) a NumPy Array with a violated fixed size
             np.array([1.0]),
             2,
             2,
@@ -884,19 +886,24 @@ def test_real_numeric_validation(
             ),
         ),
         (  # 11) a NumPy Array with a valid type conversion
-            np.array([1.0]),
+            np.array([1.0], dtype=np.float32),
+            None,
+            None,
+            np.float64,
+            np.array([1.0], dtype=np.float64),
+        ),
+        (  # 12) a NumPy Array with an invalid type conversion
+            np.array([1], dtype=np.float32),
             None,
             None,
             np.int64,
-            np.array([1], dtype=np.int64),
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
+            TypeError(
+                r"Could not convert 'value' from a 'float32'- to a 'int64'-Array "
+                r"\(uses 'safe' casting\)."
+            ),
         ),
-        (  # 12) a NumPy Array with an invalid type conversion
-            np.array([1], dtype=np.int64),
-            None,
-            None,
-            np.float32,
-            ValueError(
-
         (  # 13) an empty NumPy Array without any constraints
             np.array([]),
             None,
@@ -909,15 +916,549 @@ def test_real_numeric_validation(
             None,
             None,
             None,
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
             ValueError(
-                "Expected 'value' to be a 1D Array-like, but got a 2D Array-like of "
-                "shape (1, 1)."
+                r"Expected 'value' to be a 1D Array-like, but got a 2D Array-like of "
+                r"shape \(1, 1\)."
+            ),
+        ),
+        (  # 15) a Python List without any constraints
+            [1.0],
+            None,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 16) a Python List with a satisfied minimum size
+            [1.0],
+            1,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 17) a Python List with a violated minimum size
+            [1.0],
+            2,
+            None,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and None, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 18) a Python List with a satisfied maximum size
+            [1.0],
+            None,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 19) a Python List with a violated maximum size
+            [1.0],
+            None,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between None and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 20) a Python List with a satisfied fixed size
+            [1.0],
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 21) a Python List with a violated fixed size
+            [1.0],
+            2,
+            2,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 2, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 22) a Python List with a satisfied minimum size and a violated maximum size
+            [1.0],
+            1,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 1 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 23) a Python List with a violated minimum size and a satisfied maximum size
+            [1.0],
+            2,
+            1,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 1, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 24) a Python List with a satisfied minimum size and a satisfied maximum size  # noqa: E501
+            [1.0],
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 25) a Python List with a violated minimum size and a violated maximum size
+            [1.0],
+            2,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 26) a Python List with a valid type conversion
+            [1.0],
+            None,
+            None,
+            np.float64,
+            np.float64(1.0),
+        ),
+        (  # 27) a Python List with an invalid type conversion
+            [1.0],
+            None,
+            None,
+            np.int64,
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
+            TypeError(
+                r"Could not convert 'value' from a 'float64'- to a 'int64'-Array "
+                r"\(uses 'safe' casting\)."
+            ),
+        ),
+        (  # 28) an empty Python List without any constraints
+            [],
+            None,
+            None,
+            None,
+            ValueError("Expected 'value' to be a non-empty Array-like."),
+        ),
+        (  # 29) a 2D Python List without any constraints
+            [[1.0]],
+            None,
+            None,
+            None,
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
+            ValueError(
+                r"Expected 'value' to be a 1D Array-like, but got a 2D Array-like of "
+                r"shape \(1, 1\)."
+            ),
+        ),
+        (  # 30) a Python Tuple without any constraints
+            (1.0,),
+            None,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 31) a Python Tuple with a satisfied minimum size
+            (1.0,),
+            1,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 32) a Python Tuple with a violated minimum size
+            (1.0,),
+            2,
+            None,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and None, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 33) a Python Tuple with a satisfied maximum size
+            (1.0,),
+            None,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 34) a Python Tuple with a violated maximum size
+            (1.0,),
+            None,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between None and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 35) a Python Tuple with a satisfied fixed size
+            (1.0,),
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 36) a Python Tuple with a violated fixed size
+            (1.0,),
+            2,
+            2,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 2, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 37) a Python Tuple with a satisfied minimum size and a violated maximum size  # noqa: E501
+            (1.0,),
+            1,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 1 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 38) a Python Tuple with a violated minimum size and a satisfied maximum size  # noqa: E501
+            (1.0,),
+            2,
+            1,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 1, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 39) a Python Tuple with a satisfied minimum size and a satisfied maximum size  # noqa: E501
+            (1.0,),
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 40) a Python Tuple with a violated minimum size and a violated maximum size
+            (1.0,),
+            2,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 41) a Python Tuple with a valid type conversion
+            (1.0,),
+            None,
+            None,
+            np.float64,
+            np.float64(1.0),
+        ),
+        (  # 42) a Python Tuple with an invalid type conversion
+            (1.0,),
+            None,
+            None,
+            np.int64,
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
+            TypeError(
+                r"Could not convert 'value' from a 'float64'- to a 'int64'-Array "
+                r"\(uses 'safe' casting\)."
+            ),
+        ),
+        (  # 43) an empty Python Tuple without any constraints
+            tuple(),
+            None,
+            None,
+            None,
+            ValueError("Expected 'value' to be a non-empty Array-like."),
+        ),
+        (  # 44) a 2D Python Tuple without any constraints
+            ((1.0,),),
+            None,
+            None,
+            None,
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
+            ValueError(
+                r"Expected 'value' to be a 1D Array-like, but got a 2D Array-like of "
+                r"shape \(1, 1\)."
+            ),
+        ),
+        (  # 45) a Python Array without any constraints
+            array("d", [1.0]),
+            None,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 46) a Python Array with a satisfied minimum size
+            array("d", [1.0]),
+            1,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 47) a Python Array with a violated minimum size
+            array("d", [1.0]),
+            2,
+            None,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and None, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 48) a Python Array with a satisfied maximum size
+            array("d", [1.0]),
+            None,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 49) a Python Array with a violated maximum size
+            array("d", [1.0]),
+            None,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between None and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 50) a Python Array with a satisfied fixed size
+            array("d", [1.0]),
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 51) a Python Array with a violated fixed size
+            array("d", [1.0]),
+            2,
+            2,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 2, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 52) a Python Array with a satisfied minimum size and a violated maximum size  # noqa: E501
+            array("d", [1.0]),
+            1,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 1 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 53) a Python Array with a violated minimum size and a satisfied maximum size # noqa: E501
+            array("d", [1.0]),
+            2,
+            1,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 1, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 54) a Python Array with a satisfied minimum size and a satisfied maximum size  # noqa: E501
+            array("d", [1.0]),
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 55) a Python Array with a violated minimum size and a violated maximum size
+            array("d", [1.0]),
+            2,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 56) a Python Array with a valid type conversion
+            array("d", [1.0]),
+            None,
+            None,
+            np.float64,
+            np.float64(1.0),
+        ),
+        (  # 57) a Python Array with an invalid type conversion
+            array("d", [1.0]),
+            None,
+            None,
+            np.int64,
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
+            TypeError(
+                r"Could not convert 'value' from a 'float64'- to a 'int64'-Array "
+                r"\(uses 'safe' casting\)."
+            ),
+        ),
+        (  # 58) an empty Python Array without any constraints
+            array("d", []),
+            None,
+            None,
+            None,
+            ValueError("Expected 'value' to be a non-empty Array-like."),
+        ),
+        (  # 59) a "2D Python Array" without any constraints
+            [array("d", [1.0])],
+            None,
+            None,
+            None,
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
+            ValueError(
+                r"Expected 'value' to be a 1D Array-like, but got a 2D Array-like of "
+                r"shape \(1, 1\)."
+            ),
+        ),
+        (  # 60) a Pandas Series without any constraints
+            pd.Series([1.0]),
+            None,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 61) a Pandas Series with a satisfied minimum size
+            pd.Series([1.0]),
+            1,
+            None,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 62) a Pandas Series with a violated minimum size
+            pd.Series([1.0]),
+            2,
+            None,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and None, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 63) a Pandas Series with a satisfied maximum size
+            pd.Series([1.0]),
+            None,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 64) a Pandas Series with a violated maximum size
+            pd.Series([1.0]),
+            None,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between None and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 65) a Pandas Series with a satisfied fixed size
+            pd.Series([1.0]),
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 66) a Pandas Series with a violated fixed size
+            pd.Series([1.0]),
+            2,
+            2,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 2, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 67) a Pandas Series with a satisfied minimum size and a violated maximum size  # noqa: E501
+            pd.Series([1.0]),
+            1,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 1 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 68) a Pandas Series with a violated minimum size and a satisfied maximum size  # noqa: E501
+            pd.Series([1.0]),
+            2,
+            1,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 1, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 69) a Pandas Series with a satisfied minimum size and a satisfied maximum size  # noqa: E501
+            pd.Series([1.0]),
+            1,
+            1,
+            None,
+            np.array([1.0]),
+        ),
+        (  # 70) a Pandas Series with a violated minimum size and a violated maximum size  # noqa: E501
+            pd.Series([1.0]),
+            2,
+            0,
+            None,
+            ValueError(
+                "Expected 'value' to have a size between 2 and 0, but got "
+                "a size of 1."
+            ),
+        ),
+        (  # 71) a Pandas Series with a valid type conversion
+            pd.Series([1.0]),
+            None,
+            None,
+            np.float64,
+            np.float64(1.0),
+        ),
+        (  # 72) a Pandas Series with an invalid type conversion
+            pd.Series([1.0]),
+            None,
+            None,
+            np.int64,
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
+            TypeError(
+                r"Could not convert 'value' from a 'float64'- to a 'int64'-Array "
+                r"\(uses 'safe' casting\)."
+            ),
+        ),
+        (  # 73) an empty Pandas Series without any constraints
+            pd.Series([]),
+            None,
+            None,
+            None,
+            ValueError("Expected 'value' to be a non-empty Array-like."),
+        ),
+        (  # 74) a "2D Pandas Series" without any constraints
+            pd.DataFrame([1.0]),
+            None,
+            None,
+            None,
+            # NOTE: raw string with bracket escape for preventing regex errors
+            #       https://stackoverflow.com/a/76565993/14814813
+            ValueError(
+                r"Expected 'value' to be a 1D Array-like, but got a 2D Array-like of "
+                r"shape \(1, 1\)."
             ),
         ),
     ],
 )
 def test_real_numeric_1d_array_like_validation(
-    value: np.ndarray,
+    value: Any,
     min_size: Optional[int],
     max_size: Optional[int],
     output_dtype: Optional[Type],
@@ -941,6 +1482,7 @@ def test_real_numeric_1d_array_like_validation(
                 name="value",
                 min_size=min_size,
                 max_size=max_size,
+                output_dtype=output_dtype,
             )
 
         return
@@ -951,11 +1493,12 @@ def test_real_numeric_1d_array_like_validation(
         name="value",
         min_size=min_size,
         max_size=max_size,
+        output_dtype=output_dtype,
     )
 
     if output_dtype is not None:
         assert checked_value.dtype == output_dtype
-    else:
+    elif isinstance(value, np.ndarray):
         assert checked_value.dtype == value.dtype
 
     assert np.allclose(
