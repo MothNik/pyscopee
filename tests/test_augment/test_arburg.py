@@ -69,7 +69,7 @@ def arburg_slow(
 
 # === Tests ===
 
-
+@pytest.mark.parametrize("jit", [False, True])
 @pytest.mark.parametrize(
     "x_type",
     [
@@ -92,6 +92,7 @@ def test_arburg_single_segment_against_matlab(
         "pyarray",
         "pandas",
     ],
+    jit: bool,
 ) -> None:
     """
     This test checks the autoregressive model estimation via the Burg method for a
@@ -150,9 +151,25 @@ def test_arburg_single_segment_against_matlab(
         xs=x,
         order=4,
         tikhonov_lambda=None,
+        jit=jit,
     )
 
     # the results are compared
     assert np.allclose(arcoeffs, arcoeffs_ref, atol=1.0e-4, rtol=0.0)
 
     return
+
+@pytest.mark.parametrize("jit", [False, True])
+def test_arburg_multi_segments_against_slow(
+    jit: bool,
+) -> None:
+    """
+    This test checks the autoregressive model estimation via the Burg method for
+    multiple segments of data against the results from a slow but very literal
+    implementation.
+
+    """
+
+    # the input data and the expected result are defined
+    np.random.seed(1)
+    
