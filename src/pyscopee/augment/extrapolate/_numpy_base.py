@@ -51,7 +51,7 @@ def predict_autoregressive_one_side(
 
     # if the pad width is <= 0, no prediction is necessary
     if pad_width <= 0:
-        return np.array([], dtype=np.float64)
+        return np.empty(shape=(0,), dtype=np.float64)
 
     # the order of the autoregressive model is determined
     order = ar_coeffs.size - 1

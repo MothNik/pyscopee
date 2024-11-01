@@ -72,6 +72,8 @@ def _prepare_x_segments_for_ar_fit(
     # first, an attempt is made to convert the input to an at-least-1D NumPy Array
     try:
         xs = np.atleast_1d(np.asarray(xs, dtype=np.float64))
+
+    # NOTE: this can happen for an iterable of Array-likes of inconsistent size
     except ValueError:
         pass
 
