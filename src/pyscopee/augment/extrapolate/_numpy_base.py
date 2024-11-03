@@ -11,6 +11,7 @@ their original range via, e.g.,
 # === Imports ===
 
 import numpy as np
+from numpy.typing import NDArray
 
 # === Auxiliary functions ===
 
@@ -81,8 +82,8 @@ def predict_autoregressive_one_side(
 
 
 def arburg_fast(
-    xs: np.ndarray,
-    x_lens: np.ndarray,
+    xs: NDArray[np.float64],
+    x_lens: NDArray[np.int64],
     order: int,
     tikhonov_lambda: float,
 ) -> np.ndarray:

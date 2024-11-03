@@ -42,6 +42,7 @@ try:
 
     # if enabled, the functions are compiled
     numba_arburg_fast = jit(
+        "float64[:](float64[:,:], int64[:], int64, float64)",
         nopython=True,
         cache=True,
     )(arburg_fast)
