@@ -35,7 +35,7 @@ from ._validated_conversion import (
 # === Functions ===
 
 
-def calc_atmospheric_transmittance(
+def atmospheric_transmittance(
     wavenumbers: RealNumericArrayLike,
     temperature: RealNumeric = 25.0,
     temperature_unit: TemperatureUnit = "C",

@@ -13,5 +13,5 @@ It provides:
 
 # === Imports ===
 
-from .atmospheric import calc_atmospheric_transmittance  # noqa: F401
+from .atmospheric import atmospheric_transmittance  # noqa: F401
 from .black_body import black_body_peak, black_body_spectrum  # noqa: F401
