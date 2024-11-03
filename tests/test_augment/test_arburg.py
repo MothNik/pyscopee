@@ -366,7 +366,7 @@ def test_arburg_fails_on_too_small_segments() -> None:
         )
 
     # then, multiple segments are tested
-    x_input = [
+    x_input = [  # type: ignore
         np.random.rand(10),
         np.random.rand(20),
         np.random.rand(1),
@@ -424,7 +424,7 @@ def test_arburg_fails_for_wrong_order() -> None:
         )
 
     # an order that is too high for the smallest segment is tested
-    x_input = [
+    x_input = [  # type: ignore
         np.random.rand(20),
         np.random.rand(30),
         np.random.rand(10),

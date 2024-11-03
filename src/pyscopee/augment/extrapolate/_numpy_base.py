@@ -17,7 +17,7 @@ from numpy.typing import NDArray
 
 
 def predict_autoregressive_one_side(
-    x:NDArray[np.float64],
+    x: NDArray[np.float64],
     ar_coeffs: NDArray[np.float64],
     pad_width: int,
     is_left_side: bool,
