@@ -86,7 +86,7 @@ def _prepare_x_segments_for_ar_fit(
 
         if xs.ndim not in (1, 2):
             raise ValueError(
-                f"If provided as an Array-Like, 'xs' has to be 1D or 2D, but is of "
+                f"If provided as an Array-Like, 'xs' has to be 1D or 2D, but it is of "
                 f"dimension {xs.ndim}."
             )
 
@@ -95,7 +95,7 @@ def _prepare_x_segments_for_ar_fit(
 
     # Case 2: xs is not a list or tuple of Array-likes of inconsistent size, i.e., it
     #         is not a supported type
-    elif not isinstance(xs, (list, tuple)):
+    elif not isinstance(xs, (list, tuple)):  # pragma: no cover
         x_type_name = f"{type(xs)}"[7:-1]  # removes the "<class '" and "'>" parts
         raise ValueError(
             f"Expected 'xs' to be an Array-like or a list or tuple of Array-likes, "
@@ -105,7 +105,7 @@ def _prepare_x_segments_for_ar_fit(
     xs = tuple(
         get_validated_real_numeric_1d_array_like(
             value=x,
-            name=f"xs[{index}]",
+            name=f"xs-segment {index}",
             min_size=2,
             max_size=None,
             output_dtype=np.float64,

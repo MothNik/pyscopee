@@ -73,8 +73,8 @@ def test_arburg_single_segment_different_input_types_against_matlab(
     jit: bool,
 ) -> None:
     """
-    This test checks the autoregressive model estimation via the Burg method for a
-    single segment of data against the results from MATLAB.
+    Checks the autoregressive model estimation via the Burg method for a single segment
+    of data against the results from MATLAB.
 
     The following MATLAB code was used to generate the reference data:
 
@@ -190,14 +190,14 @@ def test_arburg_multi_segments_uniform_size_against_slow(
     jit: bool,
 ) -> None:
     """
-    This test checks the autoregressive model estimation via the Burg method for
-    multiple equally sized segments of data against the results from a slow but very
-    literal implementation.
+    Checks the autoregressive model estimation via the Burg method for multiple equally
+    sized segments of data against the results from a slow but very literal
+    implementation.
 
     """
 
     # the input data and the expected result are defined
-    np.random.seed(1)
+    np.random.seed(42)
     segments = np.random.rand(num_segments, size)
 
     # the autoregressive model is estimated ...
@@ -241,14 +241,14 @@ def test_arburg_multi_segments_different_input_types_variable_size_against_slow(
     jit: bool,
 ) -> None:
     """
-    This test checks the autoregressive model estimation via the Burg method for
-    multiple segments of data with variable sizes and different input types against
-    the results from a slow but very literal implementation.
+    Checks the autoregressive model estimation via the Burg method for multiple segments
+    of data with variable sizes and different input types against the results from a
+    slow but very literal implementation.
 
     """
 
     # the input data and the expected result are defined
-    np.random.seed(1)
+    np.random.seed(42)
     segments = [
         np.random.rand(128),
         np.random.rand(151),
@@ -306,5 +306,292 @@ def test_arburg_multi_segments_different_input_types_variable_size_against_slow(
                 atol=1e-13,
                 rtol=1e-13,
             ), f"Results mismatch for {input_type}"
+
+    return
+
+
+def test_arburg_fails_on_empty_input() -> None:
+    """
+    Checks that the function :func:`pyscopee.augment.extrapolate.arburg` raises the
+    correct exception when the input data is empty.
+
+    """
+
+    x_input = [
+        np.array([]),
+        [],
+        (),
+        array("d", []),
+        pd.Series([]),
+    ]
+
+    for x in x_input:
+        with pytest.raises(
+            ValueError,
+            match="If provided as an Array-Like, 'xs' has to be non-empty.",
+        ):
+            arburg(
+                xs=x,
+                order=1,
+                tikhonov_lambda=None,
+                jit=False,
+            )
+
+    return
+
+
+def test_arburg_fails_on_too_small_segments() -> None:
+    """
+    Checks that the function :func:`pyscopee.augment.extrapolate.arburg` raises the
+    correct exception when the segments are too small.
+
+    """
+
+    # first, a too small single segment is tested
+    np.random.seed(42)
+    x_input = np.random.rand(1)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Expected 'xs-segment 0' to have a size between 2 and None, but got a size "
+            "of 1."
+        ),
+    ):
+        arburg(
+            xs=x_input,
+            order=1,
+            tikhonov_lambda=None,
+            jit=False,
+        )
+
+    # then, multiple segments are tested
+    x_input = [
+        np.random.rand(10),
+        np.random.rand(20),
+        np.random.rand(1),
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Expected 'xs-segment 2' to have a size between 2 and None, but got a size "
+            "of 1."
+        ),
+    ):
+        arburg(
+            xs=x_input,
+            order=1,
+            tikhonov_lambda=None,
+            jit=False,
+        )
+
+    return
+
+
+def test_arburg_fails_for_wrong_order() -> None:
+    """
+    Checks that the function :func:`pyscopee.augment.extrapolate.arburg` raises the
+    correct exception when the order is invalid, i.e., either too low or too high.
+
+    """
+
+    np.random.seed(42)
+    x_input = np.random.rand(10)
+
+    # an order that is invalid in any case is tested
+    with pytest.raises(
+        ValueError,
+        match="Expected 'order' to be >= 1, but got 0.",
+    ):
+        arburg(
+            xs=x_input,
+            order=0,
+            tikhonov_lambda=None,
+            jit=False,
+        )
+
+    # an order that his too high for the provided data is tested
+    with pytest.raises(
+        ValueError,
+        match="Expected 'order' to be <= 9, but got 11.",
+    ):
+        arburg(
+            xs=x_input,
+            order=11,
+            tikhonov_lambda=None,
+            jit=False,
+        )
+
+    # an order that is too high for the smallest segment is tested
+    x_input = [
+        np.random.rand(20),
+        np.random.rand(30),
+        np.random.rand(10),
+    ]
+    with pytest.raises(
+        ValueError,
+        match="Expected 'order' to be <= 9, but got 10.",
+    ):
+        arburg(
+            xs=x_input,
+            order=10,
+            tikhonov_lambda=None,
+            jit=False,
+        )
+
+    return
+
+
+def test_arburg_fails_for_3d_array_input() -> None:
+    """
+    Checks that the function :func:`pyscopee.augment.extrapolate.arburg` raises the
+    correct exception when the input signal is a 3D array.
+
+    """
+
+    np.random.seed(42)
+    x_input = np.random.rand(3, 10, 10)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "If provided as an Array-Like, 'xs' has to be 1D or 2D, but it is of "
+            "dimension 3."
+        ),
+    ):
+        arburg(
+            xs=x_input,
+            order=1,
+            tikhonov_lambda=None,
+            jit=False,
+        )
+
+    return
+
+
+@pytest.mark.parametrize("jit", [False, True])
+def test_arburg_tikhonov_regularisation_silent_clipping(
+    jit: bool,
+) -> None:
+    """
+    Checks that the regularisation of the autoregressive model estimation of the
+    function :func:`pyscopee.augment.extrapolate.arburg` is correctly clipped to zero if
+    the regularisation parameter is negative.
+
+    """
+
+    # first, a single segment is tested
+    np.random.seed(42)
+    x = np.random.rand(1024)
+
+    # it is checked whether the AR coefficients are clipped to zero if the
+    # regularisation parameter is negative
+    arcoeffs_standard = arburg(
+        xs=x,
+        order=10,
+        tikhonov_lambda=None,
+        jit=jit,
+    )
+    for lambda_value in [-1.0, 0.0]:
+        arcoeffs_regularised = arburg(
+            xs=x,
+            order=10,
+            tikhonov_lambda=lambda_value,
+            jit=jit,
+        )
+
+        assert np.array_equal(arcoeffs_standard, arcoeffs_regularised)
+
+    # then, multiple segments are tested
+    segments = [
+        np.random.rand(128),
+        np.random.rand(151),
+        np.random.rand(779),
+    ]
+
+    # it is checked whether the AR coefficients are clipped to zero if the
+    # regularisation parameter is negative
+    arcoeffs_standard = arburg(
+        xs=segments,
+        order=10,
+        tikhonov_lambda=None,
+        jit=jit,
+    )
+    for lambda_value in [-1.0, 0.0]:
+        arcoeffs_regularised = arburg(
+            xs=segments,
+            order=10,
+            tikhonov_lambda=lambda_value,
+            jit=jit,
+        )
+
+        assert np.array_equal(arcoeffs_standard, arcoeffs_regularised)
+
+    return
+
+
+@pytest.mark.parametrize("jit", [False, True])
+def test_arburg_tikhonov_regularisation_reduces_norm(
+    jit: bool,
+) -> None:
+    """
+    Checks that the regularisation of the autoregressive model estimation of the
+    function :func:`pyscopee.augment.extrapolate.arburg` works as expected.
+
+    """
+
+    # first, a single segment is tested
+    np.random.seed(42)
+    x = np.random.rand(1024)
+
+    # it is checked whether the norm of the AR coefficients is reduced by the
+    # regularisation
+    arcoeffs_standard = arburg(
+        xs=x,
+        order=10,
+        tikhonov_lambda=None,
+        jit=jit,
+    )
+    previous_norm = np.linalg.norm(arcoeffs_standard)
+
+    for lambda_val in [0.1, 1.0, 10.0, 100.0, 1_000.0]:
+        arcoeffs_regularised = arburg(
+            xs=x,
+            order=10,
+            tikhonov_lambda=lambda_val,
+            jit=jit,
+        )
+
+        assert previous_norm > np.linalg.norm(arcoeffs_regularised)
+        previous_norm = np.linalg.norm(arcoeffs_regularised)
+
+    # then, multiple segments are tested
+    segments = [
+        np.random.rand(128),
+        np.random.rand(151),
+        np.random.rand(779),
+    ]
+
+    # it is checked whether the norm of the AR coefficients is reduced by the
+    # regularisation
+    arcoeffs_standard = arburg(
+        xs=segments,
+        order=10,
+        tikhonov_lambda=None,
+        jit=jit,
+    )
+    previous_norm = np.linalg.norm(arcoeffs_standard)
+
+    for lambda_val in [0.1, 1.0, 10.0, 100.0, 1_000.0]:
+        arcoeffs_regularised = arburg(
+            xs=segments,
+            order=10,
+            tikhonov_lambda=lambda_val,
+            jit=jit,
+        )
+
+        assert previous_norm > np.linalg.norm(arcoeffs_regularised)
+        previous_norm = np.linalg.norm(arcoeffs_regularised)
 
     return
