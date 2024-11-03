@@ -301,7 +301,7 @@ def extrapolate_autoregressive(
         output_dtype=np.float64,
     )
 
-    pad_width_internal = tuple(
+    pad_width_internal = [
         get_validated_integer(
             value=value,
             name=f"pad_width[{index}]",
@@ -310,18 +310,17 @@ def extrapolate_autoregressive(
             clip=True,
         )
         for index, value in enumerate(pad_width)
-    )
+    ]
 
     # --- Computation ---
 
     # if the padding is zero, the extrapolation is equivalent to the original signal
-    if pad_width_internal == (0, 0):
+    if pad_width_internal == [0, 0]:
         return x_internal
 
     # if the zero-lag coefficient is not exactly 1.0, a scaling is performed and a
     # warning is issued if requested
     if ar_coeffs_internal[0] != 1.0:
-        ar_coeffs_internal = ar_coeffs_internal / ar_coeffs_internal[0]
         if zero_lag_warn:
             warn(
                 f"The zero-lag coefficient of the AR model is not exactly 1.0, but "
@@ -330,6 +329,8 @@ def extrapolate_autoregressive(
                 f"This warning can be suppressed by setting 'zero_lag_warn=False'.",
                 RuntimeWarning,
             )
+
+        ar_coeffs_internal = ar_coeffs_internal / ar_coeffs_internal[0]
 
     # the Numba-accelerated or the NumPy-based implementation is used depending on the
     # user's choice
