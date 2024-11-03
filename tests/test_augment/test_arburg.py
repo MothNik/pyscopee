@@ -1,6 +1,6 @@
 """
 This test suite implements all tests for the autoregressive model estimation via the
-Burg method in the module :mod:`pyscopee.augment.extrapolate._numpy_base`.
+Burg method implemented in the function :func:`pyscopee.augment.extrapolate.arburg`.
 
 """
 
@@ -73,8 +73,8 @@ def test_arburg_single_segment_different_input_types_against_matlab(
     jit: bool,
 ) -> None:
     """
-    Checks the autoregressive model estimation via the Burg method for a single segment
-    of data against the results from MATLAB.
+    Checks the autoregressive model estimation via the function :func:`pyscopee.augment.extrapolate.arburg`
+    for a single segment of data against the results from MATLAB.
 
     The following MATLAB code was used to generate the reference data:
 
@@ -92,7 +92,7 @@ def test_arburg_single_segment_different_input_types_against_matlab(
 
     Different input types are used to test the function.
 
-    """
+    """  # noqa: E501
 
     # the input data and the expected result are defined
     np.random.seed(1)
@@ -190,11 +190,11 @@ def test_arburg_multi_segments_uniform_size_against_slow(
     jit: bool,
 ) -> None:
     """
-    Checks the autoregressive model estimation via the Burg method for multiple equally
-    sized segments of data against the results from a slow but very literal
-    implementation.
+    Checks the autoregressive model estimation via the function :func:`pyscopee.augment.extrapolate.arburg`
+    for multiple equally sized segments of data against the results from a slow but very
+    literal implementation.
 
-    """
+    """  # noqa: E501
 
     # the input data and the expected result are defined
     np.random.seed(42)
@@ -241,11 +241,11 @@ def test_arburg_multi_segments_different_input_types_variable_size_against_slow(
     jit: bool,
 ) -> None:
     """
-    Checks the autoregressive model estimation via the Burg method for multiple segments
-    of data with variable sizes and different input types against the results from a
-    slow but very literal implementation.
+    Checks the autoregressive model estimation via the function :func:`pyscopee.augment.extrapolate.arburg`
+    for multiple segments of data with variable sizes against the results from a slow
+    but very literal implementation.
 
-    """
+    """  # noqa: E501
 
     # the input data and the expected result are defined
     np.random.seed(42)
@@ -343,11 +343,12 @@ def test_arburg_fails_on_empty_input() -> None:
 def test_arburg_fails_on_too_small_segments() -> None:
     """
     Checks that the function :func:`pyscopee.augment.extrapolate.arburg` raises the
-    correct exception when the segments are too small.
+    correct exception when the segments are too small, i.e., have a size of 1.
 
     """
 
-    # first, a too small single segment is tested
+    # --- Single segment ---
+
     np.random.seed(42)
     x_input = np.random.rand(1)
 
@@ -365,7 +366,8 @@ def test_arburg_fails_on_too_small_segments() -> None:
             jit=False,
         )
 
-    # then, multiple segments are tested
+    # --- Multiple segments ---
+
     x_input = [  # type: ignore
         np.random.rand(10),
         np.random.rand(20),
@@ -399,7 +401,7 @@ def test_arburg_fails_for_wrong_order() -> None:
     np.random.seed(42)
     x_input = np.random.rand(10)
 
-    # an order that is invalid in any case is tested
+    # the order 1 is tested first; it is invalid independent of the data size
     with pytest.raises(
         ValueError,
         match="Expected 'order' to be >= 1, but got 0.",
@@ -471,29 +473,31 @@ def test_arburg_fails_for_3d_array_input() -> None:
 
 
 @pytest.mark.parametrize("jit", [False, True])
-def test_arburg_tikhonov_regularisation_silent_clipping(
+def test_arburg_tikhonov_regularisation_silent_clipping_and_none(
     jit: bool,
 ) -> None:
     """
-    Checks that the regularisation of the autoregressive model estimation of the
-    function :func:`pyscopee.augment.extrapolate.arburg` is correctly clipped to zero if
-    the regularisation parameter is negative.
+    Checks that the regularisation parameter of the autoregressive model estimation of
+    the function :func:`pyscopee.augment.extrapolate.arburg` is
+
+    - correctly clipped to zero if the regularisation parameter is negative
+    - correctly set to zero if the regularisation parameter is ``None``
 
     """
 
-    # first, a single segment is tested
+    # --- Single segment ---
+
     np.random.seed(42)
     x = np.random.rand(1024)
 
-    # it is checked whether the AR coefficients are clipped to zero if the
-    # regularisation parameter is negative
+    # it is checked whether the regularisation parameter is correctly set to zero
     arcoeffs_standard = arburg(
         xs=x,
         order=10,
-        tikhonov_lambda=None,
+        tikhonov_lambda=0.0,
         jit=jit,
     )
-    for lambda_value in [-1.0, 0.0]:
+    for lambda_value in [-1.0, None]:
         arcoeffs_regularised = arburg(
             xs=x,
             order=10,
@@ -503,22 +507,22 @@ def test_arburg_tikhonov_regularisation_silent_clipping(
 
         assert np.array_equal(arcoeffs_standard, arcoeffs_regularised)
 
-    # then, multiple segments are tested
+    # --- Multiple segments ---
+
     segments = [
         np.random.rand(128),
         np.random.rand(151),
         np.random.rand(779),
     ]
 
-    # it is checked whether the AR coefficients are clipped to zero if the
-    # regularisation parameter is negative
+    # it is checked whether the regularisation parameter is correctly set to zero
     arcoeffs_standard = arburg(
         xs=segments,
         order=10,
-        tikhonov_lambda=None,
+        tikhonov_lambda=0.0,
         jit=jit,
     )
-    for lambda_value in [-1.0, 0.0]:
+    for lambda_value in [-1.0, None]:
         arcoeffs_regularised = arburg(
             xs=segments,
             order=10,
@@ -537,16 +541,19 @@ def test_arburg_tikhonov_regularisation_reduces_norm(
 ) -> None:
     """
     Checks that the regularisation of the autoregressive model estimation of the
-    function :func:`pyscopee.augment.extrapolate.arburg` works as expected.
+    function :func:`pyscopee.augment.extrapolate.arburg` works as expected, i.e., that
+    the norm of the AR coefficients is successively reduced for successively larger
+    regularisation parameters.
 
     """
 
-    # first, a single segment is tested
+    # --- Single segment ---
+
     np.random.seed(42)
     x = np.random.rand(1024)
 
-    # it is checked whether the norm of the AR coefficients is reduced by the
-    # regularisation
+    # the regularisation is tested to SUCCESSIVELY reduce the norm of the AR
+    # coefficients for SUCCESSIVELY larger lambda values
     arcoeffs_standard = arburg(
         xs=x,
         order=10,
@@ -566,15 +573,16 @@ def test_arburg_tikhonov_regularisation_reduces_norm(
         assert previous_norm > np.linalg.norm(arcoeffs_regularised)
         previous_norm = np.linalg.norm(arcoeffs_regularised)
 
-    # then, multiple segments are tested
+    #  --- Multiple segments ---
+
     segments = [
         np.random.rand(128),
         np.random.rand(151),
         np.random.rand(779),
     ]
 
-    # it is checked whether the norm of the AR coefficients is reduced by the
-    # regularisation
+    # the regularisation is tested to SUCCESSIVELY reduce the norm of the AR
+    # coefficients for SUCCESSIVELY larger lambda values
     arcoeffs_standard = arburg(
         xs=segments,
         order=10,
