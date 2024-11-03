@@ -48,13 +48,18 @@ try:
     )(arburg_fast)
 
     numba_predict_autoregressive_one_side = jit(
+        "float64[:](float64[:], float64[:], int64, boolean)",
         nopython=True,
         cache=True,
     )(predict_autoregressive_one_side)
 
     # the function ``_numpy_base.extrapolate_autoregressive`` is now re-defined here
     # because it relies on the compiled function ``numba_predict_autoregressive_one_side``  # noqa: E501
-    @jit(nopython=True, cache=True)
+    @jit(
+        "float64[:](float64[:], float64[:], int64, int64)",
+        nopython=True,
+        cache=True,
+    )
     def numba_extrapolate_autoregressive(
         x: np.ndarray,
         ar_coeffs: np.ndarray,

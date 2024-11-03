@@ -235,7 +235,7 @@ def extrapolate_autoregressive(
     pad_width: Tuple[Integer, Integer] = (0, 0),
     jit: bool = True,
     zero_lag_warn: bool = True,
-) -> np.ndarray:
+) -> NDArray[np.float64]:
     """
     Extrapolates a signal beyond its original range using the coefficients of an
     autoregressive model.
@@ -270,7 +270,7 @@ def extrapolate_autoregressive(
 
     Returns
     -------
-    x_extrapolated : :class:`numpy.ndarray` of shape (n + pad_left + pad_right,)
+    x_extrapolated : :class:`numpy.ndarray` of shape (n + pad_left + pad_right,) of dtype ``numpy.float64``
         The extrapolated signal.
 
     Raises
@@ -282,7 +282,7 @@ def extrapolate_autoregressive(
     ValueError
         If ``x`` or ``ar_coeffs`` are not of expected size.
 
-    """
+    """  # noqa: E501
 
     # --- Input Validation ---
 

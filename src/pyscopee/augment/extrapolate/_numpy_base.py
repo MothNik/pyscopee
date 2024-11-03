@@ -17,20 +17,20 @@ from numpy.typing import NDArray
 
 
 def predict_autoregressive_one_side(
-    x: np.ndarray,
-    ar_coeffs: np.ndarray,
+    x:NDArray[np.float64],
+    ar_coeffs: NDArray[np.float64],
     pad_width: int,
     is_left_side: bool,
-) -> np.ndarray:
+) -> NDArray[np.float64]:
     """
     Predicts the signal values on one side of the input signal using the coefficients of
     an autoregressive model.
 
     Parameters
     ----------
-    x : :class:`numpy.ndarray` of shape (n,)
+    x : :class:`numpy.ndarray` of shape (n,)  of dtype ``numpy.float64``
         The real input signal for which the extrapolation is to be performed.
-    ar_coeffs : :class:`numpy.ndarray` of shape (order + 1,)
+    ar_coeffs : :class:`numpy.ndarray` of shape (order + 1,)  of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         The zero-lag coefficient ``ar_coeffs[0]`` is expected to be present and exactly
         equal to ``1.0``.
@@ -45,10 +45,10 @@ def predict_autoregressive_one_side(
 
     Returns
     -------
-    x_predicted : :class:`numpy.ndarray` of shape (pad_width,)
+    x_predicted : :class:`numpy.ndarray` of shape (pad_width,)  of dtype ``numpy.float64``
         The predicted signal values.
 
-    """
+    """  # noqa: E501
 
     # if the pad width is <= 0, no prediction is necessary
     if pad_width <= 0:
@@ -86,7 +86,7 @@ def arburg_fast(
     x_lens: NDArray[np.int64],
     order: int,
     tikhonov_lambda: float,
-) -> np.ndarray:
+) -> NDArray[np.float64]:
     """
     Computes the AR coefficients for an autoregressive model using a fast implementation
     of Burg's method that relies on an implicit matrix formulation that even allows for
@@ -114,7 +114,7 @@ def arburg_fast(
 
     Returns
     -------
-    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,)
+    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
@@ -130,7 +130,7 @@ def arburg_fast(
        Transactions on Signal Processing (2000), 48(10), pp. 2876-2880,
        DOI: 10.1109/78.869039
 
-    """
+    """  # noqa: E501
 
     # first, the autocorrelation vectors c would be initialised, but it is more
     # efficient to initialise the auxiliary vectors r with 2 times the autocorrelation
@@ -223,20 +223,20 @@ def arburg_fast(
 
 
 def extrapolate_autoregressive(
-    x: np.ndarray,
-    ar_coeffs: np.ndarray,
+    x: NDArray[np.float64],
+    ar_coeffs: NDArray[np.float64],
     pad_width_left: int,
     pad_width_right: int,
-) -> np.ndarray:
+) -> NDArray[np.float64]:
     """
     Extrapolates a signal beyond its original range using the coefficients of an
     autoregressive model.
 
     Parameters
     ----------
-    x : :class:`numpy.ndarray` of shape (n,)
+    x : :class:`numpy.ndarray` of shape (n,)  of dtype ``numpy.float64``
         The real input signal to be extrapolated.
-    ar_coeffs : :class:`numpy.ndarray` of shape (order + 1,)
+    ar_coeffs : :class:`numpy.ndarray` of shape (order + 1,) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         The zero-lag coefficient ``ar_coeffs[0]`` is expected to be present and exactly
         equal to ``1.0``.
@@ -247,10 +247,10 @@ def extrapolate_autoregressive(
 
     Returns
     -------
-    x_extrapolated : :class:`numpy.ndarray` of shape (n + pad_left + pad_right,)
+    x_extrapolated : :class:`numpy.ndarray` of shape (n + pad_left + pad_right,)  of dtype ``numpy.float64``
         The extrapolated signal.
 
-    """
+    """  # noqa: E501
 
     return np.concatenate(
         (
