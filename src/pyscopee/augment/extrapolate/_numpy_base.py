@@ -141,9 +141,11 @@ def arburg_fast(
     for iter_i, num_elements in enumerate(x_lens):
         x = xs[iter_i, 0:num_elements]
         for iter_j in range(0, order + 1):
-            r_auxiliary[order - iter_j, iter_i] = 2.0 * np.sum(
-                x[iter_j:] * x[: num_elements - iter_j]
-            )
+            r_auxiliary[order - iter_j, iter_i] = 2.0 * np.correlate(
+                x[iter_j:],
+                x[: num_elements - iter_j],
+                mode="valid",
+            )[0]
 
     r_view = r_auxiliary[order - 1 : order, ::]
 
