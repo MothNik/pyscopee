@@ -22,7 +22,7 @@ package-data = {"*" = ["AUTHORS.txt", "VERSION.txt"]}
 version = {file = "src/pyscopee/VERSION.txt"}
 readme = {file = ["README.md"]}
 dependencies = {file = "requirements/base.txt"}
-optional-dependencies = {dev = {file = "requirements/dev.txt"}, fast = {file = "requirements/fast.txt"}}
+optional-dependencies = {dev = {file = "requirements/dev.txt"}, fast = {file = "requirements/fast.txt"}, git_ci = {file = "requirements/git_ci.txt"}}
 
 [tool.isort]
 profile = "black"

@@ -22,8 +22,8 @@ install.dev: upgrade-pip
 	@echo Installing the required dependencies and building the package for development ...
 	python -m pip install --upgrade .["dev"]
 
-.PHONY: install.ci
-install.ci: upgrade-pip
+.PHONY: install.git_ci
+install.git_ci: upgrade-pip
 	@echo Installing the required dependencies for CI ...
 	python -m pip install --upgrade .["git_ci"]
 
