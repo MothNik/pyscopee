@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - 0-initial-setup-and-implementation
   pull_request:
     branches:
       - main
