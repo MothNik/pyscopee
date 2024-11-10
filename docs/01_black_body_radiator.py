@@ -23,7 +23,7 @@ PLOT_FILEPATH = "./example_plots/01_black_body_radiator.png"
 
 # the wavenumbers and temperatures are set up
 wavenumbers = np.linspace(
-    start=1.0,
+    start=0.0,
     stop=15_000.0,
     num=5_000,
 )

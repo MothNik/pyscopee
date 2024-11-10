@@ -50,6 +50,8 @@ def black_body_spectrum(
     ----------
     wavenumbers : class:`int` or :class:`float` or :class:`numpy.ndarray` of shape (n,)
         The wavenumber(s) in 1 / cm.
+        Negative wavenumbers are allowed and will be converted to their absolute values
+        to make the spectrum evenly symmetric around zero.
     temperature : class:`int` or :class:`float`
         The temperature given in the specified ``temperature_unit``.
     temperature_unit : {``"K"``, ``"k"``, ``"C"``, ``"c"``, ``"F"``, ``"f"``}, default=``"K"``
@@ -87,9 +89,12 @@ def black_body_spectrum(
     # --- Input Validation ---
 
     # the wavenumbers are checked and converted to a 1D NumPy Array
-    wavenumbers = get_validated_real_numeric_1d_array_like(
-        value=wavenumbers,
-        name="wavenumbers",
+    # NOTE: the absolute values are taken to allow for negative wavenumbers
+    wavenumbers = np.abs(
+        get_validated_real_numeric_1d_array_like(
+            value=wavenumbers,
+            name="wavenumbers",
+        )
     )
 
     # then, the temperature is converted to Kelvin
@@ -100,21 +105,27 @@ def black_body_spectrum(
 
     # --- Computation ---
 
-    return (
-        (2e8 * _PLANCK_CONSTANT * _SPEED_OF_LIGHT * _SPEED_OF_LIGHT)
-        * wavenumbers
-        * wavenumbers
-        * wavenumbers
-    ) / (
-        np.exp(
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(
+            wavenumbers > 0.0,
             (
-                (_PLANCK_CONSTANT * _SPEED_OF_LIGHT * 100.0)
-                / (_BOLTZMANN_CONSTANT * temperature)
+                (2e8 * _PLANCK_CONSTANT * _SPEED_OF_LIGHT * _SPEED_OF_LIGHT)
+                * wavenumbers
+                * wavenumbers
+                * wavenumbers
             )
-            * wavenumbers
+            / (
+                np.exp(
+                    (
+                        (_PLANCK_CONSTANT * _SPEED_OF_LIGHT * 100.0)
+                        / (_BOLTZMANN_CONSTANT * temperature)
+                    )
+                    * wavenumbers
+                )
+                - 1.0
+            ),
+            0.0,
         )
-        - 1.0
-    )
 
 
 def black_body_peak(
