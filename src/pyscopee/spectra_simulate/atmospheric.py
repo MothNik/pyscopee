@@ -198,7 +198,6 @@ def atmospheric_transmittance(
                 medium="air",
                 databank="hitran",
                 wstep="auto",  # type: ignore
-                cutoff=0.0,
                 verbose=verbose,
                 warnings={
                     "MissingDiluentBroadeningWarning": "ignore",
