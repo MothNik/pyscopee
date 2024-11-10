@@ -86,7 +86,7 @@ def black_body_spectrum(
 
     # --- Input Validation ---
 
-    # the wavenumbers are checked and converted to a 1D NumPy array
+    # the wavenumbers are checked and converted to a 1D NumPy Array
     wavenumbers = get_validated_real_numeric_1d_array_like(
         value=wavenumbers,
         name="wavenumbers",
