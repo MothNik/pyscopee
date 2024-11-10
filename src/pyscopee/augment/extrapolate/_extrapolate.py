@@ -58,7 +58,7 @@ def _prepare_x_segments_for_ar_fit(
 
     Returns
     -------
-    xs_packaged : :class:`numpy.ndarray` of shape (len(xs), max(len(xs[i]))) of dtype :class:`numpy.float64`
+    xs_packaged : :class:`numpy.ndarray` of shape (len(xs), max(len(xs[i]))) of dtype ``numpy.float64``
         The segments stacked row-wise into a 2D-Array. Its ``i``-th row corresponds to
         ``xs[i]`` with the remaining elements padded to ``max(len(xs[i]))`` with
         arbitrary values (``numpy.empty`` initialisation).
@@ -170,7 +170,7 @@ def arburg(
 
     Returns
     -------
-    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,) of dtype :class:`numpy.float64`
+    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
