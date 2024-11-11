@@ -135,6 +135,14 @@ def atmospheric_transmittance(
             "not installed. You can install it via 'pip install radis'."
         ) from error
 
+    # --- SSL Setup ---
+
+    # NOTE: this somehow seems to fix an SSL error that occurs when accessing the
+    #       HITRAN database (see https://www.bilibili.com/opus/860819408718659588)
+    import ssl
+
+    ssl._create_default_https_context = ssl._create_unverified_context
+
     # --- Input Validation ---
 
     # the wavenumbers are checked and converted to a 1D NumPy Array
