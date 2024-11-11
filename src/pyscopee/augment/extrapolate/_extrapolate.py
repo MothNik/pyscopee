@@ -248,7 +248,7 @@ def extrapolate_autoregressive(
         Its length has to be at least ``2``.
     ar_coeffs : Array-like of shape (order + 1,)
         The AR coefficients of the autoregressive model.
-        There have to be at least ``2`` (AR(1) model) and at most ``len(x) - 1``
+        There have to be at least ``2`` (AR(1) model) and at most ``len(x) + 1``
         coefficients.
         They are internally promoted to ``numpy.float64``.
         The zero-lag coefficient ``ar_coeffs[0]`` is expected to be present. In case
@@ -297,7 +297,7 @@ def extrapolate_autoregressive(
         value=ar_coeffs,
         name="ar_coeffs",
         min_size=2,
-        max_size=x_internal.size - 1,
+        max_size=x_internal.size + 1,
         output_dtype=np.float64,
     )
 
