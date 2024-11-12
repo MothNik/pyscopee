@@ -7,7 +7,6 @@ using the Burg algorithm implemented in ``pyscopee``.
 # === Imports ===
 
 import os
-import time
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -47,7 +46,7 @@ BURG_ORDER = 2_500
 # the Tikhonov regularization parameter for the Burg autoregression
 BURG_REGULARIZATION = 1e-10
 # the number of extrapolated points on each side of the interferogram
-NUM_EXTRAPOLATED_POINTS = 100_000
+NUM_EXTRAPOLATED_POINTS = 20_000
 
 # the path where to save the resulting plot
 PLOT_FILEPATH = "./example_plots/02_interferogram_burg_extrapolate.png"
@@ -149,14 +148,12 @@ for fit_region in BURG_FIT_REGIONS:
     )[0]
     fit_basis.append(truncated_interferogram[fit_indices])
 
-start_time = time.perf_counter()
 ar_coeffs = augment.arburg(
     xs=fit_basis,
     order=BURG_ORDER,
     tikhonov_lambda=BURG_REGULARIZATION,
     jit=True,
 )
-print(f"Burg Autoregression took {(time.perf_counter() - start_time):.3f} s")
 
 extrapolation_left_side = augment.extrapolate_autoregressive(
     x=truncated_interferogram[
