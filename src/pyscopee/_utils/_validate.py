@@ -17,7 +17,7 @@ __all__ = [
 
 import operator
 from enum import IntEnum
-from typing import Any, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, Dict, Optional, Tuple, Type, TypeVar
 
 import numpy as np
 
@@ -37,6 +37,19 @@ class _BoundKind(IntEnum):
     LOW = 0
     UPPER = 1
 
+
+# === Constants ===
+
+# the assignment of the comparison operators for the bounds
+_BOUND_COMPARISON_ASSIGNMENT: Dict[
+    Tuple[_BoundKind, bool],
+    Tuple[Callable[[Any, Any], bool], Callable[[Any, Any], Any], str],
+] = {
+    (_BoundKind.LOW, True): (operator.ge, max, ">="),
+    (_BoundKind.LOW, False): (operator.gt, max, ">"),
+    (_BoundKind.UPPER, True): (operator.le, min, "<="),
+    (_BoundKind.UPPER, False): (operator.lt, min, "<"),
+}
 
 # === Auxiliary Functions ===
 
@@ -99,9 +112,10 @@ def _convert_to_validated_type(
 def _get_bound_validated_value(
     value: ValueType,
     name: str,
-    bound: Optional[ValueType] = None,
-    bound_kind: _BoundKind = _BoundKind.LOW,
-    clip: bool = False,
+    bound: Optional[ValueType],
+    bound_kind: _BoundKind,
+    bound_inclusive: bool,
+    clip: bool,
 ) -> ValueType:
     """
     Checks if a value satisfies a comparison with a bound, clips it if necessary, and
@@ -113,12 +127,16 @@ def _get_bound_validated_value(
         The value to check.
     name : :class:`str`
         The name of the value used for error messages.
-    bound : :class:`float` or :class:`int` or ``None``, default=``None``
+    bound : :class:`float` or :class:`int` or ``None``
         The bound to compare against.
         If ``None``, no comparison is performed.
-    bound_kind : :class:`_BoundKind`, default=``_BoundKind.LOW``
+    bound_kind : :class:`_BoundKind`
         The bound kind to compare against, i.e., either the lower or upper bound.
-    clip : :class:`bool`, default=``False``
+    bound_inclusive : :class:`bool`
+        Whether the bound comparison is inclusive (with comparison operators ``>=`` and
+        ``<=``; ``True``) or exclusive (with comparison operators ``>`` and ``<``;
+        ``False``).
+    clip : :class:`bool`
         Whether to clip the ``value`` to the `bound`` if the comparison is not
         satisfied.
         For
@@ -127,6 +145,8 @@ def _get_bound_validated_value(
             ``value = max(value, bound)``
         - ``bound_kind=_BoundKind.UPPER``, the conversion is
             ``value = min(value, bound)``.
+
+        It cannot be ``True`` if ``bound_inclusive`` is ``False``.
 
     Returns
     -------
@@ -137,22 +157,25 @@ def _get_bound_validated_value(
     ------
     ValueError
         If the comparison is not satisfied and ``clip`` is ``False``.
+    ValueError
+        If ``clip`` is ``True`` and ``bound_inclusive`` is ``False``.
 
     """
+
+    # if clipping is enabled and the bound is exclusive, an error is raised
+    if clip and not bound_inclusive:
+        raise ValueError(f"Cannot clip '{name}' to an exclusive bound. ")
 
     # if no bound is provided, the function returns without doing anything
     if bound is None:
         return value
 
     # the comparison operator, clip function, and message string are determined
-    if bound_kind == _BoundKind.LOW:
-        comparison_operator = operator.ge
-        comparison_str = ">="
-        clipper = max
-    else:
-        comparison_operator = operator.le
-        comparison_str = "<="
-        clipper = min
+    (
+        comparison_operator,
+        clipper,
+        comparison_str,
+    ) = _BOUND_COMPARISON_ASSIGNMENT[(bound_kind, bound_inclusive)]
 
     # the comparison is performed and an error is raised if it is not satisfied
     comparison_satisfied = comparison_operator(value, bound)
@@ -172,9 +195,11 @@ def _get_validated_scalar(
     name: str,
     output_type: Type[ValueType],
     allowed_from_types: Tuple[Type, ...],
-    min_value: Optional[ValueType] = None,
-    max_value: Optional[ValueType] = None,
-    clip: bool = False,
+    min_value: Optional[ValueType],
+    min_inclusive: bool,
+    max_value: Optional[ValueType],
+    max_inclusive: bool,
+    clip: bool,
 ) -> ValueType:
     """
     Validates a scalar value by converting it to a specific type and checking if it is
@@ -192,10 +217,14 @@ def _get_validated_scalar(
     allowed_from_types : (type, ...)
         The allowed types for the value from which it can be converted.
         It should not contain ``output_type``.
-    min_value, max_value : :class:`float` or :class:`int` or ``None``, default=``None``
+    min_value, max_value : :class:`float` or :class:`int` or ``None``
         The minimum and maximum allowed values.
         If ``None``, the value is not checked against the respective bound.
-    clip : :class:`bool`, default=``False``
+    min_inclusive, max_inclusive : :class:`bool`
+        Whether the minimum and maximum value bounds are inclusive (with comparison
+        operators ``>=`` and ``<=``; ``True``) or exclusive (with comparison operators
+        ``>`` and ``<``; ``False``).
+    clip : :class:`bool`
         Whether to clip the value to the allowed range if it is not within
         [``min_value``, ``max_value``].
 
@@ -235,15 +264,16 @@ def _get_validated_scalar(
 
     # afterwards, the value is checked to be within the allowed range and clipped if
     # necessary and enabled
-    for bound, bound_kind in [
-        (min_value, _BoundKind.LOW),
-        (max_value, _BoundKind.UPPER),
+    for bound, bound_kind, is_inclusive in [
+        (min_value, _BoundKind.LOW, min_inclusive),
+        (max_value, _BoundKind.UPPER, max_inclusive),
     ]:
         value = _get_bound_validated_value(
             value=value,
             name=name,
             bound=bound,
-            bound_kind=bound_kind,  # type: ignore
+            bound_kind=bound_kind,
+            bound_inclusive=is_inclusive,
             clip=clip,
         )
 
@@ -257,7 +287,9 @@ def get_validated_integer(
     value: Any,
     name: str,
     min_value: Optional[int] = None,
+    min_inclusive: bool = True,
     max_value: Optional[int] = None,
+    max_inclusive: bool = True,
     clip: bool = False,
 ) -> int:
     """
@@ -272,6 +304,10 @@ def get_validated_integer(
     min_value, max_value : :class:`int` or ``None``, default=``None``
         The minimum and maximum allowed values.
         If ``None``, the value is not checked against the respective bound.
+    min_inclusive, max_inclusive : :class:`bool`, default=``True``
+        Whether the minimum and maximum value bounds are inclusive (with comparison
+        operators ``>=`` and ``<=``; ``True``) or exclusive (with comparison operators
+        ``>`` and ``<``; ``False``).
     clip : :class:`bool`, default=``False``
         Whether to clip the value to the allowed range if it is not within
         [``min_value``, ``max_value``].
@@ -296,7 +332,9 @@ def get_validated_integer(
         output_type=int,
         allowed_from_types=(np.integer,),
         min_value=min_value,
+        min_inclusive=min_inclusive,
         max_value=max_value,
+        max_inclusive=max_inclusive,
         clip=clip,
     )
 
@@ -305,7 +343,9 @@ def get_validated_real_numeric(
     value: Any,
     name: str,
     min_value: Optional[float] = None,
+    min_inclusive: bool = True,
     max_value: Optional[float] = None,
+    max_inclusive: bool = True,
     clip: bool = False,
 ) -> float:
     """
@@ -320,6 +360,10 @@ def get_validated_real_numeric(
     min_value, max_value : :class:`float` or ``None``, default=``None``
         The minimum and maximum allowed values.
         If ``None``, the value is not checked against the respective bound.
+    min_inclusive, max_inclusive : :class:`bool`, default=``True``
+        Whether the minimum and maximum value bounds are inclusive (with comparison
+        operators ``>=`` and ``<=``; ``True``) or exclusive (with comparison operators
+        ``>`` and ``<``; ``False``).
     clip : :class:`bool`, default=``False``
         Whether to clip the value to the allowed range if it is not within
         [``min_value``, ``max_value``].
@@ -348,7 +392,9 @@ def get_validated_real_numeric(
             np.integer,
         ),
         min_value=min_value,
+        min_inclusive=min_inclusive,
         max_value=max_value,
+        max_inclusive=max_inclusive,
         clip=clip,
     )
 
