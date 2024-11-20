@@ -97,9 +97,9 @@ def arburg_fast(
     xs : :class:`numpy.ndarray` of shape (m, max(n_i)) of dtype ``numpy.float64``
         The real input signal segments for which the AR coefficients are to be computed.
         Multiple segments are processed by stacking them row-wise in a 2D array whose
-        maximum column size is determined by the longest signal. The resulting
+        maximum column size is determined by the longest segment. The resulting
         prediction vector will minimise the forward and backward prediction errors
-        over all segments combined.
+        over all segments combined (but not across segments).
         See ``x_lens`` for the actual Array layout.
     x_lens : :class:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
         The lengths of the individual input signal segments.
@@ -162,7 +162,8 @@ def arburg_fast(
     a_prediction[0] = 1.0
     a_view = a_prediction[0:1]
 
-    # ... followed by the auxiliary vector g
+    # ... followed by the auxiliary vector g which resembles the product of the
+    # correlation matrix R and the prediction coefficients a
     g_auxiliary = np.zeros(shape=(order + 1))
     g_view = g_auxiliary[0:2]
     for iter_i, num_elements in enumerate(x_lens):
@@ -187,9 +188,10 @@ def arburg_fast(
         a_view[1 : 1 + iter_ord] += k_reflection * np.flip(a_view[1 : 1 + iter_ord])
         a_view[1 + iter_ord] = k_reflection
 
-        # after that, the auxiliary vectors r and the auxiliary products ΔR @
+        # after that, the auxiliary vectors r and the auxiliary products ΔR @ a
         # are updated for each segment before they will be summed up in the auxiliary
         # vector g
+        # NOTE: ΔR is a rank-1 update matrix
         g_view += k_reflection * np.flip(g_view)
         r_view_new = r_auxiliary[order - 2 - iter_ord : order, ::]
         for iter_i, num_elements in enumerate(x_lens):
@@ -199,9 +201,9 @@ def arburg_fast(
                 x[num_elements - 1 - iter_ord : :]
             ) * x[num_elements - 2 - iter_ord]
 
-            # the products ΔR @ are computed
+            # the products ΔR @ a are computed
             # ΔR is a rank-1 matrix, but it is more efficient to compute the individual
-            # vector-vector products
+            # vector-vector products with the vector a directly
             x_view = np.flip(x[0 : 2 + iter_ord])
             delta_r_dot_a = -x_view * np.sum(x_view * a_view)
             x_view = x[num_elements - 2 - iter_ord : :]
