@@ -14,10 +14,7 @@ from pyscopee.augment.extrapolate import extrapolate_autoregressive
 # === Tests ===
 
 
-@pytest.mark.parametrize("jit", [False, True])
-def test_ar_extrapolation_does_nothing_for_zero_pad_width(
-    jit: bool,
-) -> None:
+def test_ar_extrapolation_does_nothing_for_zero_pad_width() -> None:
     """
     Checks that the function :func:`pyscopee.augment.extrapolate.extrapolate_autoregressive`
     does not change the input signal if the extrapolation width is zero.
@@ -31,7 +28,6 @@ def test_ar_extrapolation_does_nothing_for_zero_pad_width(
         x=x,
         ar_coeffs=np.array([1.0, 0.5, -0.3]),
         pad_width=(0, 0),
-        jit=jit,
     )
 
     assert np.array_equal(x, x_extrapolated)
@@ -39,10 +35,7 @@ def test_ar_extrapolation_does_nothing_for_zero_pad_width(
     return
 
 
-@pytest.mark.parametrize("jit", [False, True])
-def test_ar_extrapolation_warns_for_non_unity_zero_lag_coeff(
-    jit: bool,
-) -> None:
+def test_ar_extrapolation_warns_for_non_unity_zero_lag_coeff() -> None:
     """
     Checks that the function :func:`pyscopee.augment.extrapolate.extrapolate_autoregressive`
     issues a warning if the zero-lag coefficient is not unity.
@@ -63,7 +56,6 @@ def test_ar_extrapolation_warns_for_non_unity_zero_lag_coeff(
             x=x,
             ar_coeffs=np.array([0.5, 0.5, -0.3]),
             pad_width=(10, 10),
-            jit=jit,
         )
 
     return

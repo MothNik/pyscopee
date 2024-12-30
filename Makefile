@@ -84,17 +84,22 @@ test-parallel:
 	pytest -k "$(TEST)" -n="auto" -x
 
 # Running the tests
-.PHONY: tests
-tests:
+.PHONY: tests.nojit
+tests.nojit:
 	@echo Running the tests with pytest ...
-	pytest ./tests -n="auto" -x --no-jit
+	pytest ./tests -x --no-jit
+
+.PHONY: tests.runtime
+tests.runtime:
+	@echo Running the tests with pytest ...
+	pytest ./tests -x
 
 .PHONY: tests.htmlcov
 tests.htmlcov:
 	@echo Running the tests with HTML coverage report ...
-	pytest --cov=pyscopee ./tests -n="auto" --cov-report=html -x --no-jit
+	pytest --cov=pyscopee ./tests --cov-report=html -x --no-jit
 
 .PHONY: tests.xmlcov
 tests.xmlcov:
 	@echo Running the tests with XML coverage report ...
-	pytest --cov=pyscopee ./tests -n="auto" --cov-report=xml -x --no-jit
+	pytest --cov=pyscopee ./tests --cov-report=xml -x --no-jit

@@ -32,9 +32,8 @@ from ..._utils import (
     get_validated_real_numeric,
     get_validated_real_numeric_1d_array_like,
 )
-from ._numba_base import numba_arburg_fast, numba_extrapolate_autoregressive
-from ._numpy_base import arburg_fast as numpy_arburg_fast
-from ._numpy_base import extrapolate_autoregressive as numpy_extrapolate_autoregressive
+from ._numpy_base import arburg_fast as _arburg_fast
+from ._numpy_base import extrapolate_autoregressive as _extrapolate_autoregressive
 
 # === Auxiliary Functions ===
 
@@ -133,12 +132,14 @@ def arburg(
     xs: Union[ArrayLike, List[ArrayLike], Tuple[ArrayLike, ...]],
     order: Integer = 1,
     tikhonov_lambda: Optional[RealNumeric] = None,
-    jit: bool = True,
 ) -> NDArray[np.float64]:
     """
     Computes the AR coefficients for an autoregressive model using a fast implementation
     of Burg's method that relies on an implicit matrix formulation that even allows for
     Tikhonov regularisation.
+
+    If available at runtime, a Numba-accelerated implementation is used instead of the
+    NumPy-based one.
 
     Parameters
     ----------
@@ -162,11 +163,6 @@ def arburg(
         Values ``< 0.0`` are silently clipped to ``0.0``.
         Higher values of lambda lead to a more stable solution but may introduce a bias.
         ``None`` is equivalent to ``0.0``.
-    jit : :class:`bool`, default=``True``
-        Whether to use the Numba-accelerated implementation (``True``) or the
-        NumPy-based implementation (``False``).
-        If Numba is not available, the function silently falls back to the NumPy-based
-        implementation.
 
     Returns
     -------
@@ -220,12 +216,11 @@ def arburg(
 
     # depending on the choice of the user, the Numba-accelerated or the NumPy-based
     # implementation is used
-    arburg_func = numba_arburg_fast if jit else numpy_arburg_fast
-    return arburg_func(  # type: ignore
-        xs=xs,  # type: ignore
-        x_lens=x_lens,  # type: ignore
-        order=order,  # type: ignore
-        tikhonov_lambda=tikhonov_lambda,  # type: ignore
+    return _arburg_fast(
+        xs=xs,
+        x_lens=x_lens,
+        order=order,
+        tikhonov_lambda=tikhonov_lambda,
     )
 
 
@@ -239,6 +234,9 @@ def extrapolate_autoregressive(
     """
     Extrapolates a signal beyond its original range using the coefficients of an
     autoregressive model.
+
+    If available at runtime, a Numba-accelerated implementation is used instead of the
+    NumPy-based one.
 
     Parameters
     ----------
@@ -259,11 +257,6 @@ def extrapolate_autoregressive(
         respectively.
         Negative values are silently clipped to ``0``, which means that no extrapolation
         is performed on the respective side.
-    jit : :class:`bool`, default=``True``
-        Whether to use the Numba-accelerated implementation (``True``) or the
-        NumPy-based implementation (``False``).
-        If Numba is not available, the function silently falls back to the NumPy-based
-        implementation.
     zero_lag_warn : :class:`bool`, default=``True``
         Whether to issue a warning if the zero-lag coefficient of the AR model is not
         exactly equal to ``1.0`` (``True``) or not (``False``).
@@ -334,12 +327,9 @@ def extrapolate_autoregressive(
 
     # the Numba-accelerated or the NumPy-based implementation is used depending on the
     # user's choice
-    extrapolation_func = (
-        numba_extrapolate_autoregressive if jit else numpy_extrapolate_autoregressive
-    )
-    return extrapolation_func(  # type: ignore
-        x=x_internal,  # type: ignore
-        ar_coeffs=ar_coeffs_internal,  # type: ignore
-        pad_width_left=pad_width_internal[0],  # type: ignore
-        pad_width_right=pad_width_internal[1],  # type: ignore
+    return _extrapolate_autoregressive(
+        x=x_internal,
+        ar_coeffs=ar_coeffs_internal,
+        pad_width_left=pad_width_internal[0],
+        pad_width_right=pad_width_internal[1],
     )

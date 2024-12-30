@@ -68,10 +68,7 @@ def arburg_slow(
 # === Tests ===
 
 
-@pytest.mark.parametrize("jit", [False, True])
-def test_arburg_single_segment_different_input_types_against_matlab(
-    jit: bool,
-) -> None:
+def test_arburg_single_segment_different_input_types_against_matlab() -> None:
     """
     Checks the autoregressive model estimation via the function :func:`pyscopee.augment.extrapolate.arburg`
     for a single segment of data against the results from MATLAB.
@@ -138,7 +135,6 @@ def test_arburg_single_segment_different_input_types_against_matlab(
             xs=x_to_fit,
             order=4,
             tikhonov_lambda=None,
-            jit=jit,
         )
 
         # the results are compared
@@ -153,7 +149,6 @@ def test_arburg_single_segment_different_input_types_against_matlab(
     return
 
 
-@pytest.mark.parametrize("jit", [False, True])
 @pytest.mark.parametrize(
     "size, num_segments, order",
     [
@@ -187,7 +182,6 @@ def test_arburg_multi_segments_uniform_size_against_slow(
     size: int,
     num_segments: int,
     order: int,
-    jit: bool,
 ) -> None:
     """
     Checks the autoregressive model estimation via the function :func:`pyscopee.augment.extrapolate.arburg`
@@ -205,7 +199,6 @@ def test_arburg_multi_segments_uniform_size_against_slow(
         xs=segments,
         order=order,
         tikhonov_lambda=None,
-        jit=jit,
     )
     # ... together with the reference results
     arcoeffs_ref = arburg_slow(
@@ -226,7 +219,6 @@ def test_arburg_multi_segments_uniform_size_against_slow(
     return
 
 
-@pytest.mark.parametrize("jit", [False, True])
 @pytest.mark.parametrize(
     "order",
     [
@@ -238,7 +230,6 @@ def test_arburg_multi_segments_uniform_size_against_slow(
 )
 def test_arburg_multi_segments_different_input_types_variable_size_against_slow(
     order: int,
-    jit: bool,
 ) -> None:
     """
     Checks the autoregressive model estimation via the function :func:`pyscopee.augment.extrapolate.arburg`
@@ -295,7 +286,6 @@ def test_arburg_multi_segments_different_input_types_variable_size_against_slow(
                 xs=input_segments,
                 order=inner_order,
                 tikhonov_lambda=None,
-                jit=jit,
             )
 
             # the results are compared
@@ -334,7 +324,6 @@ def test_arburg_fails_on_empty_input() -> None:
                 xs=x,
                 order=1,
                 tikhonov_lambda=None,
-                jit=False,
             )
 
     return
@@ -363,7 +352,6 @@ def test_arburg_fails_on_too_small_segments() -> None:
             xs=x_input,
             order=1,
             tikhonov_lambda=None,
-            jit=False,
         )
 
     # --- Multiple segments ---
@@ -385,7 +373,6 @@ def test_arburg_fails_on_too_small_segments() -> None:
             xs=x_input,
             order=1,
             tikhonov_lambda=None,
-            jit=False,
         )
 
     return
@@ -410,7 +397,6 @@ def test_arburg_fails_for_wrong_order() -> None:
             xs=x_input,
             order=0,
             tikhonov_lambda=None,
-            jit=False,
         )
 
     # an order that his too high for the provided data is tested
@@ -422,7 +408,6 @@ def test_arburg_fails_for_wrong_order() -> None:
             xs=x_input,
             order=11,
             tikhonov_lambda=None,
-            jit=False,
         )
 
     # an order that is too high for the smallest segment is tested
@@ -439,7 +424,6 @@ def test_arburg_fails_for_wrong_order() -> None:
             xs=x_input,
             order=10,
             tikhonov_lambda=None,
-            jit=False,
         )
 
     return
@@ -466,16 +450,12 @@ def test_arburg_fails_for_3d_array_input() -> None:
             xs=x_input,
             order=1,
             tikhonov_lambda=None,
-            jit=False,
         )
 
     return
 
 
-@pytest.mark.parametrize("jit", [False, True])
-def test_arburg_tikhonov_regularisation_silent_clipping_and_none(
-    jit: bool,
-) -> None:
+def test_arburg_tikhonov_regularisation_silent_clipping_and_none() -> None:
     """
     Checks that the regularisation parameter of the autoregressive model estimation of
     the function :func:`pyscopee.augment.extrapolate.arburg` is
@@ -495,14 +475,12 @@ def test_arburg_tikhonov_regularisation_silent_clipping_and_none(
         xs=x,
         order=10,
         tikhonov_lambda=0.0,
-        jit=jit,
     )
     for lambda_value in [-1.0, None]:
         arcoeffs_regularised = arburg(
             xs=x,
             order=10,
             tikhonov_lambda=lambda_value,
-            jit=jit,
         )
 
         assert np.array_equal(arcoeffs_standard, arcoeffs_regularised)
@@ -520,14 +498,12 @@ def test_arburg_tikhonov_regularisation_silent_clipping_and_none(
         xs=segments,
         order=10,
         tikhonov_lambda=0.0,
-        jit=jit,
     )
     for lambda_value in [-1.0, None]:
         arcoeffs_regularised = arburg(
             xs=segments,
             order=10,
             tikhonov_lambda=lambda_value,
-            jit=jit,
         )
 
         assert np.array_equal(arcoeffs_standard, arcoeffs_regularised)
@@ -535,10 +511,7 @@ def test_arburg_tikhonov_regularisation_silent_clipping_and_none(
     return
 
 
-@pytest.mark.parametrize("jit", [False, True])
-def test_arburg_tikhonov_regularisation_reduces_norm(
-    jit: bool,
-) -> None:
+def test_arburg_tikhonov_regularisation_reduces_norm() -> None:
     """
     Checks that the regularisation of the autoregressive model estimation of the
     function :func:`pyscopee.augment.extrapolate.arburg` works as expected, i.e., that
@@ -558,7 +531,6 @@ def test_arburg_tikhonov_regularisation_reduces_norm(
         xs=x,
         order=10,
         tikhonov_lambda=None,
-        jit=jit,
     )
     previous_norm = np.linalg.norm(arcoeffs_standard)
 
@@ -567,7 +539,6 @@ def test_arburg_tikhonov_regularisation_reduces_norm(
             xs=x,
             order=10,
             tikhonov_lambda=lambda_val,
-            jit=jit,
         )
 
         assert previous_norm > np.linalg.norm(arcoeffs_regularised)
@@ -587,7 +558,6 @@ def test_arburg_tikhonov_regularisation_reduces_norm(
         xs=segments,
         order=10,
         tikhonov_lambda=None,
-        jit=jit,
     )
     previous_norm = np.linalg.norm(arcoeffs_standard)
 
@@ -596,7 +566,6 @@ def test_arburg_tikhonov_regularisation_reduces_norm(
             xs=segments,
             order=10,
             tikhonov_lambda=lambda_val,
-            jit=jit,
         )
 
         assert previous_norm > np.linalg.norm(arcoeffs_regularised)

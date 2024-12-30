@@ -13,9 +13,16 @@ their original range via, e.g.,
 import numpy as np
 from numpy.typing import NDArray
 
+from ..._utils import jit
+
 # === Auxiliary functions ===
 
 
+@jit(
+    "float64[:](float64[:], float64[:], int64, boolean)",
+    nopython=True,
+    cache=True,
+)
 def predict_autoregressive_one_side(
     x: NDArray[np.float64],
     ar_coeffs: NDArray[np.float64],
@@ -81,6 +88,11 @@ def predict_autoregressive_one_side(
 # === Functions ===
 
 
+@jit(
+    "float64[:](float64[:,:], int64[:], int64, float64)",
+    nopython=True,
+    cache=True,
+)
 def arburg_fast(
     xs: NDArray[np.float64],
     x_lens: NDArray[np.int64],
@@ -229,6 +241,11 @@ def arburg_fast(
     return a_prediction
 
 
+@jit(
+    "float64[:](float64[:], float64[:], int64, int64)",
+    nopython=True,
+    cache=True,
+)
 def extrapolate_autoregressive(
     x: NDArray[np.float64],
     ar_coeffs: NDArray[np.float64],

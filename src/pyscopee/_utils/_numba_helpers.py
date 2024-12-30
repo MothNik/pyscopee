@@ -8,6 +8,10 @@ This module implements auxiliary functionalities to handle Numba-related tasks, 
 
 """
 
+# === Setup ===
+
+__all__ = ["jit"]
+
 # === Imports ===
 
 import os
@@ -44,37 +48,56 @@ NUMBA_NO_JIT_ENV_KEY = "CUSTOM_NUMBA_NO_JIT"
 
 # whether the environment variable is set to specify that Numba ``jit``-compilation
 # should take effect or not in the current runtime environment
-do_numba_normal_jit_action = (
+_do_numba_normal_jit_action = (
     os.environ.get(NUMBA_NO_JIT_ENV_KEY, NumbaJitActions.NORMAL.value)
     == NumbaJitActions.NORMAL.value
 )
 
+# if Numba is not available at runtime, then the environment variable has to be
+# ignored
+try:
+    import numba as __numba
+
+    _numba_available = True
+
+except ImportError:
+    _numba_available = False
+
+_do_numba_normal_jit_action = _do_numba_normal_jit_action and _numba_available
+
 
 # === Functions ===
 
+# if Numba ``jit``-compilation can be used, the ``jit`` decorator is imported from Numba
+if _do_numba_normal_jit_action:
+    jit = __numba.jit  # type: ignore
 
-def no_jit(*args, **kwargs) -> Callable:
-    """
-    Fake decorator that can be used to make sure that Numba ``jit``-compilation has no
-    effect.
+# if Numba ``jit``-compilation cannot be used or was disabled, a fake decorator is
+# defined to be able to use the same syntax in the code
+else:
 
-    Parameters
-    ----------
-    func : :class:`Callable`
-        The function that is decorated.
-    args : :class:`tuple`
-        The fake positional arguments.
-    kwargs : :class:`dict`
-        The fake keyword arguments.
+    def jit(*args, **kwargs) -> Callable:
+        """
+        Fake decorator that can be used to make sure that Numba ``jit``-compilation has
+        no effect when Numba was not available or disabled.
 
-    Returns
-    -------
-    decorated_func : :class:`Callable`
-        The decorated function.
+        Parameters
+        ----------
+        func : :class:`Callable`
+            The function that is decorated.
+        args : :class:`tuple`
+            The fake positional arguments.
+        kwargs : :class:`dict`
+            The fake keyword arguments.
 
-    """
+        Returns
+        -------
+        decorated_func : :class:`Callable`
+            The decorated function.
 
-    def decorator(func: Callable) -> Callable:
-        return func
+        """
 
-    return decorator
+        def decorator(func: Callable) -> Callable:
+            return func
+
+        return decorator
