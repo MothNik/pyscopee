@@ -1,10 +1,10 @@
 """
-Module :mod:`augment.extrapolate._numpy_base`
+Module :mod:`augment.extrapolate._autoregressive_base`
 
-This module implements NumPy-based basic functions for extrapolating signals beyond
-their original range via, e.g.,
+This module implements functions for extrapolating signals beyond their original range
+using autoregressive models, such as
 
-- the Burg method for autoregressive model estimation
+- the (segmented, Tikhonov-regularised) Burg method for AR coefficient estimation
 
 """
 

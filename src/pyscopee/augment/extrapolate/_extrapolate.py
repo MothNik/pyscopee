@@ -32,8 +32,10 @@ from ..._utils import (
     get_validated_real_numeric,
     get_validated_real_numeric_1d_array_like,
 )
-from ._numpy_base import arburg_fast as _arburg_fast
-from ._numpy_base import extrapolate_autoregressive as _extrapolate_autoregressive
+from ._autoregressive_base import arburg_fast as _arburg_fast
+from ._autoregressive_base import (
+    extrapolate_autoregressive as _extrapolate_autoregressive,
+)
 
 # === Auxiliary Functions ===
 
