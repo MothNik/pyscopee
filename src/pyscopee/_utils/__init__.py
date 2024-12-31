@@ -14,3 +14,4 @@ from ._validate import (  # noqa: F401
     get_validated_real_numeric,
     get_validated_real_numeric_1d_array_like,
 )
+from ._visuals import apply_pyscopee_plot_style, get_pyscopee_style  # noqa: F401

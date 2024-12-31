@@ -10,10 +10,9 @@ import os
 import numpy as np
 from matplotlib import pyplot as plt
 
-from pyscopee import black_body_peak, black_body_spectrum
+from pyscopee import apply_pyscopee_plot_style, black_body_peak, black_body_spectrum
 
-plt.style.use(os.path.join(os.path.dirname(__file__), "./pyscopee.mplstyle"))
-
+apply_pyscopee_plot_style()
 
 # === Constants ===
 
