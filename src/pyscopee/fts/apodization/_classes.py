@@ -905,7 +905,7 @@ class ZeroMappedHyperbolicSine(CustomApodization):
     ----------
     .. [1] Parker K. J., Apodization and Windowing Functions,
        Transactions on Ultrasonics, Ferroelectrics, and Frequency Control,
-       Volume 60, Issue 6, 2013, pp. 1263-1271, DOI: 10.1109/TUFFC.2013.2691
+       Volume 60, Issue 6, 2013, pp. 1263 - 1271, DOI: 10.1109/TUFFC.2013.2691
 
     """
 

@@ -519,6 +519,12 @@ def zero_mapped_hyperbolic_sine(
     to zero in a second order continuous manner (i.e., the function and its first
     two derivatives are all continuously fading out to zero).
 
+    References
+    ----------
+    .. [1] Parker K. J., Apodization and Windowing Functions,
+       Transactions on Ultrasonics, Ferroelectrics, and Frequency Control,
+       Volume 60, Issue 6, 2013, pp. 1263 - 1271, DOI: 10.1109/TUFFC.2013.2691
+
     """
 
     if not skip_validation:

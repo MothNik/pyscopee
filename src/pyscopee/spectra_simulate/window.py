@@ -82,6 +82,13 @@ def window_three_segment_smooth_cutoff(
         If the ramp-up and ramp-down bounds are not in the correct order.
     ValueError
         If the exponents are not positive.
+
+    References
+    ----------
+    .. [1] Lee L., et al., Extension of the Norton–Beer apodizing functions in Fourier
+       transform spectrometry, Applied Optics, Volume 6, Issue 20, pp. 4622 - 4626,
+       2012, DOI: 10.1364/AO.51.004622
+       
     """
 
     # --- Input Validation ---
