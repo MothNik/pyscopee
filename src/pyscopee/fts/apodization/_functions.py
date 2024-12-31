@@ -15,9 +15,9 @@ the functions are just implemented as plain NumPy functions.
 __all__ = [
     "ApodizationFunction",
     "WrappedApodizationFunction",
-    "get_validated_xmax",
-    "_convert_to_validated_apodization_function",
+    "as_apodization_function",
     "boxcar",
+    "get_validated_xmax",
     "not_implemented_apodization",
     "triangular",
     "zero_mapped_hyperbolic_sine",
@@ -352,9 +352,15 @@ def as_apodization_function(
             f'required parameters:\n{", ".join(required_parameters)}.',
         )
 
-    return _convert_to_validated_apodization_function(
+    wrapped_apodization_function = _convert_to_validated_apodization_function(
         apodization_function=apodization_function
     )
+
+    # a tag is added to the wrapped function to indicate that it is a validated
+    # apodization function
+    wrapped_apodization_function.is_validated_apodization_function = True  # type: ignore
+
+    return wrapped_apodization_function
 
 
 @as_apodization_function

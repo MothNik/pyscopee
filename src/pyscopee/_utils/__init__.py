@@ -8,6 +8,7 @@ This module provides utilities used across the ``pyscopee`` package.
 # === Imports ===
 
 from ._custom_types import Integer, RealNumeric, RealNumericArrayLike  # noqa: F401
+from ._miscellaneous import split_class_name_to_readable  # noqa: F401
 from ._numba_helpers import jit  # noqa: F401
 from ._validate import (  # noqa: F401
     get_validated_integer,
