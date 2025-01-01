@@ -4,6 +4,7 @@ axes.labelpad: 7
 axes.titlesize: 16
 axes.titlepad: 25
 axes.grid: True
+axes.prop_cycle : cycler(color=['red', 'blue', 'limegreen', 'darkmagenta', 'gold', 'hotpink', 'deepskyblue', 'lightseagreen'])
 
 # Legend settings
 legend.fontsize: 14

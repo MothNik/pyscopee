@@ -10,8 +10,13 @@ A Python package for Spectroscopy in Python.
 import os as _os
 
 from . import augment  # noqa: F401
-from ._utils import apply_pyscopee_plot_style, get_pyscopee_style  # noqa: F401
-from .fts import apodization  # noqa: F401
+from ._utils import (  # noqa: F401
+    apply_pyscopee_plot_style,
+    get_pyscopee_style,
+    pyscopee_plot_style,
+)
+
+# from .fts import apodization  # noqa: F401
 from .spectra_simulate import black_body_peak, black_body_spectrum  # noqa: F401
 
 # === Package Metadata ===

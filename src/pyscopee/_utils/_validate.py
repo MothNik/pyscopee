@@ -11,13 +11,14 @@ __all__ = [
     "get_validated_integer",
     "get_validated_real_numeric",
     "get_validated_real_numeric_1d_array_like",
+    "isinstance_incl_none",
 ]
 
 # === Imports ===
 
 import operator
 from enum import IntEnum
-from typing import Any, Callable, Dict, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, Dict, Optional, Tuple, Type, TypeVar, Union
 
 import numpy as np
 
@@ -65,7 +66,7 @@ def _convert_to_validated_type(
 
     Parameters
     ----------
-    value : Any
+    value: any
         The value to convert.
     name : :class:`str`
         The name of the value used for error messages.
@@ -207,7 +208,7 @@ def _get_validated_scalar(
 
     Parameters
     ----------
-    value : Any
+    value: any
         The value to validate.
     name : :class:`str`
         The name of the value used for error messages.
@@ -283,6 +284,40 @@ def _get_validated_scalar(
 # === Functions ===
 
 
+def isinstance_incl_none(
+    value: Any, types: Union[Type, Tuple[Optional[Type], ...], None]
+) -> bool:
+    """
+    Checks if a value is an instance of one of the provided types including a check
+    for ``None``.
+
+    Parameters
+    ----------
+    value: any
+        The value to check.
+    types : type or (type, ...) or ``None``
+        The types to check against.
+        If a type is ``None``, a check is performed for ``None``.
+
+    Returns
+    -------
+    is_instance : :class:`bool`
+        Whether the value is an instance of one of the provided types.
+
+    """
+
+    if not isinstance(types, tuple):
+        types = (types,)
+
+    if None in types:
+        if value is None:
+            return True
+
+        types = tuple(filter(lambda t: t is not None, types))
+
+    return isinstance(value, types)  # type: ignore
+
+
 def get_validated_integer(
     value: Any,
     name: str,
@@ -297,7 +332,7 @@ def get_validated_integer(
 
     Parameters
     ----------
-    value : Any
+    value : any
         The value to check.
     name : :class:`str`
         The name of the value used for error messages.
@@ -353,7 +388,7 @@ def get_validated_real_numeric(
 
     Parameters
     ----------
-    value : Any
+    value: any
         The value to check.
     name : :class:`str`
         The name of the value used for error messages.
@@ -412,7 +447,7 @@ def get_validated_real_numeric_1d_array_like(
 
     Parameters
     ----------
-    value : Any
+    value: any
         The value to check.
     name : :class:`str`
         The name of the value used for error messages.
