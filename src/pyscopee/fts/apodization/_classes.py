@@ -19,18 +19,16 @@ __all__ = [
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
 
 import numpy as np
-from matplotlib import pyplot as plt
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from numpy.typing import NDArray
 
 from ..._utils import (
     Integer,
     RealNumeric,
     RealNumericArrayLike,
-    apply_pyscopee_plot_style,
     get_validated_integer,
     get_validated_real_numeric,
+    isinstance_incl_none,
+    pyscopee_plot_style,
     split_class_name_to_readable,
 )
 from ._functions import (
@@ -42,6 +40,17 @@ from ._functions import (
     triangular,
     zero_mapped_hyperbolic_sine,
 )
+from ._visualisation import (
+    ApodizationWithFourierPlot,
+    FourierYScales,
+    PlotDataForApodizationWithFourier,
+)
+
+# === Typing ===
+
+_ApodizationPlotLimits = Union[
+    Tuple[RealNumeric, RealNumeric], Literal["default"], None
+]
 
 # === Auxiliary Functions ===
 
@@ -121,6 +130,63 @@ def _get_validated_evaluator(
         return evaluator
 
     return as_apodization_function(evaluator)
+
+
+def _get_validated_plot_limits(
+    value: _ApodizationPlotLimits,
+    name: str,
+    default_value: Optional[Tuple[float, float]],
+) -> Optional[Tuple[float, float]]:
+    """
+    Validates the plot limits ``x_plot_limits`` or ``freq_plot_limits`` for the
+    apodization :meth:`plot` method of the apodization classes.
+
+    Parameters
+    ----------
+    value : (:class:`float` or :class:`int`, :class:`float` or :class:`int`) or ``"default"`` or ``None``
+        The limits of the x-axis of the plot for the apodization function in the
+        time/space domain or the frequency domain.
+        If ``"default"``, the default limits are used.
+        If ``None``, ``None`` is returned.
+    name : :class:`str`
+        The name of the parameter for which the plot limits are validated.
+    default_value : (:class:`float`, :class:`float`) or ``None``
+        The default value of the plot limits if ``value`` is ``"default"``.
+
+    Returns
+    -------
+    validated_value : (:class:`float`, :class:`float`) or ``None``
+        The validated plot limits for the apodization function in the time/space domain
+        or the frequency domain.
+
+    """  # noqa: E501
+
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        if value.lower() == "default":
+            return default_value
+
+    if not isinstance(value, tuple):
+        raise TypeError(
+            f"Expected '{name}' to be a 2-tuple of real numeric values, "
+            f"but it is of type {type(value)}."
+        )
+
+    if len(value) != 2:
+        raise ValueError(
+            f"Expected '{name}' to be a 2-tuple of real numeric values, "
+            f"but it is of length {len(value)}."
+        )
+
+    return tuple(  # type: ignore
+        get_validated_real_numeric(
+            value=value,
+            name=f"{name}[{index}]",
+        )
+        for index, value in enumerate(value)
+    )
 
 
 def _get_validated_exponent(
@@ -411,7 +477,6 @@ class CustomApodization:
         self,
         x_limit: RealNumeric = 5.0,
         x_num_points: Integer = 50_001,
-        normalize: bool = True,
         real_fft: bool = True,
     ) -> Tuple[
         NDArray[np.float64],
@@ -439,25 +504,22 @@ class CustomApodization:
             It has to be a positive integer ``>= 100``.
             Increasing this number will allow for sampling higher frequencies in the
             Fourier transform.
-        normalize : :class:`bool`, default=``True``
-            Whether to normalize the apodization function to have a sum of 1 in the
-            time/space domain (``True``) or not (``False``).
         real_fft : :class:`bool`, default=``True``
             Whether to use the real-valued Fast Fourier Transform (FFT) :func:`numpy.fft.rfft`
             (``True``) or the complex-valued FFT :func:`numpy.fft.fft` (``False``).
 
         Returns
         -------
-        x : :class:`numpy.ndarray` of shape (x_num_points,) of dtype ``np.float64``
-            The points at which the apodization function is computed.
-            Its right endpoint is excluded.
-        y : :class:`numpy.ndarray` of shape (x_num_points,) of dtype ``np.float64``
-            The values of the apodization function at the given points.
-            It is scaled to have a sum of 1 if ``normalize`` is ``True``.
-        frequencies : :class:`numpy.ndarray` of shape (x_num_points,) or (x_num_points // 2 + 1,) of dtype ``np.float64``
+        apodization_x : :class:`numpy.ndarray` of shape (x_num_points,) of dtype ``np.float64``
+            The points at which the apodization function is computed in the time/space
+            domain. Its right endpoint is excluded.
+        apodization_y : :class:`numpy.ndarray` of shape (x_num_points,) of dtype ``np.float64``
+            The values of the apodization function at the given points in the time/space
+            domain.
+        fourier_x : :class:`numpy.ndarray` of shape (x_num_points,) or (x_num_points // 2 + 1,) of dtype ``np.float64``
             The frequencies at which the Fourier transform is computed.
             If ``real_fft`` is ``True``, only the positive frequencies are returned.
-        fourier_transform : :class:`numpy.ndarray` of shape (x_num_points,) or (x_num_points // 2 + 1,) of dtype ``np.float64``
+        fourier_y : :class:`numpy.ndarray` of shape (x_num_points,) or (x_num_points // 2 + 1,) of dtype ``np.float64``
             The values of the Fourier transform at the given frequencies.
             If ``real_fft`` is ``True``, only the coefficients for the positive
             frequencies are returned.
@@ -486,16 +548,14 @@ class CustomApodization:
 
         # the apodization function is evaluated on the interval
         # [-x_limit * x_max, x_limit * x_max], but the right endpoint is excluded
-        x = np.linspace(
+        apodization_x = np.linspace(
             start=-x_limit * self._x_max,
             stop=x_limit * self._x_max,
             num=x_num_points,
             endpoint=False,
             dtype=np.float64,
         )
-        y = self(x=x)
-        if normalize:
-            y /= y.sum()
+        apodization_y = self(x=apodization_x)
 
         # the Fourier transform is computed
         if real_fft:
@@ -505,44 +565,50 @@ class CustomApodization:
             frequency_func = np.fft.fftfreq
             fft_func = np.fft.fft
 
-        frequencies = frequency_func(
+        fourier_x = frequency_func(
             n=x_num_points,
-            d=(x[-1] - x[0]) / (x_num_points - 1),
+            d=(apodization_x[-1] - apodization_x[0]) / (x_num_points - 1),
         )
         # the point of x=0 is shifted to the beginning of the array to avoid imaginary
         # parts in the Fourier transform
-        fourier_transform = fft_func(np.roll(y, shift=x_num_points // 2))
+        fourier_y = fft_func(np.roll(apodization_y, shift=x_num_points // 2))
 
-        return x, y, frequencies, fourier_transform.real
+        return apodization_x, apodization_y, fourier_x, fourier_y.real
 
-    # TODO: enable comparison of apodization functions
     def plot(
         self,
-        fig: Optional[Figure] = None,
-        x_compute_limit: RealNumeric = 5.0,
-        x_num_points: Integer = 50_001,
-        x_plot_limits: Optional[Tuple[RealNumeric, RealNumeric]] = None,
-        frequency_plot_limits: Optional[Tuple[RealNumeric, RealNumeric]] = None,
-        fourier_scale: Literal[
-            "linear", "log", "logarithmic", "db", "decibel"
+        figure: Optional[ApodizationWithFourierPlot] = None,
+        apodization_x_compute_limits: RealNumeric = 5.0,
+        apodization_num_points: Integer = 50_001,
+        apodization_plot_x_limits: _ApodizationPlotLimits = "default",
+        apodization_plot_y_limits: _ApodizationPlotLimits = "default",
+        fourier_plot_x_limits: _ApodizationPlotLimits = "default",
+        fourier_plot_y_limits: _ApodizationPlotLimits = "default",
+        fourier_y_scale: Literal[
+            "linear",
+            "lin",
+            "linear_absolute",
+            "lin_abs",
+            "log",
+            "logarithmic",
+            "db",
+            "decibel",
         ] = "linear",
         apodization_line_kwargs: Optional[Dict[str, Any]] = None,
         fourier_line_kwargs: Optional[Dict[str, Any]] = None,
-        autoscale_y_axes: bool = True,
-        fig_size: Tuple[float, float] = (12, 6),
+        figsize: Tuple[RealNumeric, RealNumeric] = (12, 8),
         use_pyscopee_style: bool = True,
-    ) -> Tuple[Figure, Axes, Axes]:
+    ) -> ApodizationWithFourierPlot:
         """
         Plots the apodization function and its Fourier transform.
 
         Parameters
         ----------
-        fig : :class:`matplotlib.figure.Figure` or ``None``, default=``None``
-            The figure to use for the plot.
-            If provided, it has to be a figure with two axes that can be accessed via
-            ``fig.get_axes()[0]`` and ``fig.get_axes()[1]``.
+        figure : :class:`ApodizationWithFourierPlot` or ``None``, default=``None``
+            The figure to which the data should be plotted.
+            If a figure is provided, it is cleared before plotting the data.
             If ``None``, a new figure is created.
-        x_compute_limit : :class:`float` or :class:`int`, default=5.0
+        apodization_x_compute_limits : :class:`float` or :class:`int`, default=``5.0``
             The maximum value of the x-range over which the apodization function is
             computed before computing its Fourier transform. It is given as a multiple
             of ``x_max``, i.e., a value of ``5.0`` means that the apodization function
@@ -551,178 +617,147 @@ class CustomApodization:
             It has to be a positive real number ``>= 1.0``.
             Increasing this number beyond ``1.0`` will result in a more densely sampled
             Fourier transform.
-        x_num_points : :class:`int`, default=50_001
+        apodization_num_points : :class:`int`, default=``50_001``
             The number of equidistant points to use for the computation of the
             Fourier transform. It will silently be rounded up to the next even number.
             It has to be a positive integer ``>= 100``.
             Increasing this number will allow for sampling higher frequencies in the
             Fourier transform.
-        x_plot_limits : (:class:`float` or :class:`int`, :class:`float` or :class:`int`) or ``None``, default=``None``
-            The limits of the x-axis of the plot for the time/space domain.
-            If the first element is larger than the second one, the plot will be
-            flipped horizontally.
-            If ``None``, the limits are set to ``(-1.05 * x_max, 1.05 * x_max)``.
-        frequency_plot_limits : (:class:`float` or :class:`int`, :class:`float` or :class:`int`) or ``None``, default=``None``
-            The limits of the x-axis of the plot for the frequency domain.
-            If the first element is larger than the second one, the plot will be
-            flipped horizontally.
-            If ``None``, the limits are set to ``(-10.0 / x_max,  10.0 / x_max)``.
-        fourier_scale : {``"linear"``, ``"log"``, ``"logarithmic``, ``"db"``, ``"decibel"``}, default=``"linear"``
+        apodization_plot_x_limits, apodization_plot_y_limits : (:class:`float` or :class:`int`, :class:`float` or :class:`int`) or ``"default"`` or ``None``, default=``"default"``
+            The limits of the x-axis and y-axis of the plot for the apodization function
+            in the time/space domain.
+            If ``"default"``, the limits are set to ``(-1.05 * x_max, 1.05 * x_max)``
+            and ``None``, respectively.
+            If ``None``, the limits are given by the data.
+        fourier_plot_x_limits, fourier_plot_y_limits : (:class:`float` or :class:`int`, :class:`float` or :class:`int`) or ``"default"`` or ``None``, default=``"default"``
+            Similar to ``apodization_plot_x_limits`` and ``apodization_plot_y_limits``,
+            but for the Fourier transform plot in the frequency domain.
+            The default limits are ``(-10.0 / x_max, 10.0 / x_max)`` and ``None``,
+            respectively.
+        fourier_scale : {``"linear"``, ``"lin"``, ``linear_absolute``, ``"lin_abs"``, `"log"``, ``"logarithmic"``, ``"db"``, ``"decibel"``}, default=``"linear"``
             The scale of the y-axis of the Fourier transform plot.
 
-            - ``"linear"`` will show the y-axis in linear scale.
-            - ``"log"`` or ``"logarithmic"`` will show the y-axis in logarithmic scale for the absolute
-                value.
+            - ``"linear"`` or ``"lin"`` will show the y-axis in linear scale
+            - ``"linear_absolute"`` or ``"lin_abs"`` will show the y-axis in linear
+                scale for the absolute value
+            - ``"log"`` or ``"logarithmic"`` will show the y-axis in logarithmic scale
+                for the absolute value
             - ``"db"`` or ``"decibel"`` is similar to ``"log"``, but the y-axis is
-                scaled in decibels.
+                scaled in decibels
 
-            ``"log"``, ``"logarithmic"``, ``"db"``, and ``"decibel"`` require
-            ``fourier_show_absolute`` to be ``True``.
         apodization_line_kwargs : :{:class:`str`: any}, default=``None``
             The keyword arguments for the line plot of the apodization function.
-            If ``None``, the default line style is used, which is a red solid line
-            with a width of 2.
+            If ``None``, the default line style is used, which is a solid line with a
+            width of 2. Its color is determined by the current color cycle.
         fourier_line_kwargs : :{:class:`str`: any}, default=``None``
             The keyword arguments for the line plot of the Fourier transform.
             If ``None``, the ``apodization_line_kwargs`` are used.
-        autoscale_y_axes : :class:`bool`, default=``True``
-            Whether to automatically scale the y-axes of the plots (``True``) or leave
-            them as they are (``False``).
-        fig_size : (:class:`float` or :class:`int`, :class:`float` or :class:`int`), default=(12, 6)
+        figsize : (:class:`float` or :class:`int`, :class:`float` or :class:`int`), default=(12, 8)
             The size of the figure in inches as a tuple of ``(width, height)``.
-            It is only used if ``fig`` is ``None``.
+            It is only used if ``figure`` is ``None``.
         use_pyscopee_style : :class:`bool`, default=``True``
             Whether to use the default ``pyscopee`` style for the plot (``True``) or not
             (``False``).
             For other styles, the RC parameters of ``matplotlib`` have to be set
             manually either before calling this method or by using the
             Matplotlib style context manager.
-            It is only applied if ``fig`` is ``None``.
 
         Returns
         -------
-        fig : :class:`matplotlib.figure.Figure`
-            The figure containing the plot.
-        time_space_ax, frequency_ax : :class:`matplotlib.axes.Axes`
-            The axes of the time/space domain and the frequency domain, respectively.
+        figure : :class:`ApodizationWithFourierPlot`
+            The figure to which the plotted data was added.
+            For further modifications, its figure and axes can be accessed via
+            ``figure.fig`` and ``figure.axes``, respectively.
 
         Raises
         ------
         TypeError
-            If ``x_compute_limit``, ``x_num_points``, ``x_plot_limits``,
-            ``freq_plot_limits``, or ``fourier_scale`` are not of the expected type.
+            If ``figure``, ``apodization_x_compute_limits``, ``apodization_num_points``,
+            ``apodization_plot_x_limits``, ``apodization_plot_y_limits``,
+            ``fourier_plot_x_limits``, ``fourier_plot_y_limits``, or
+            ``fourier_scale`` are not of the expected type.
         ValueError
-            If ``x_compute_limit`` is not a positive real number ``>= 1.0``.
+            If ``apodization_x_compute_limits`` is not a positive real number
+            ``>= 1.0``.
         ValueError
-            If ``x_num_points`` is not a positive integer ``>= 100``.
+            If ``apodization_num_points`` is not a positive integer ``>= 100``.
         ValueError
-            If ``x_plot_limits`` or ``freq_plot_limits`` are not real numeric 2-tuples.
+            If ``apodization_plot_x_limits``, ``apodization_plot_y_limits``,
+            ``fourier_plot_x_limits``, or ``fourier_plot_y_limits`` are provided, but
+            not valid 2-tuples of real numeric values.
         ValueError
             If ``fourier_scale`` is not one of the allowed values.
-        ValueError
-            If ``fourier_scale`` is ``"log"``, ``"logarithmic"``, ``"db"``, or
-            ``"decibel"`` and ``fourier_show_absolute`` is ``False``.
-        ValueError
-            If the provided figure does not have two axes.
 
         """  # noqa: E501
 
-        # --- Nested Functions ---
-
-        def get_validated_plot_limits(
-            value: Optional[Tuple[RealNumeric, RealNumeric]],
-            name: str,
-            default_value: Tuple[float, float],
-        ) -> Tuple[float, float]:
-            """
-            Validates the plot limits ``x_plot_limits`` or ``freq_plot_limits``.
-
-            """
-
-            if value is None:
-                return default_value
-
-            if not isinstance(value, tuple):
-                raise TypeError(
-                    f"Expected '{name}' to be a 2-tuple of real numeric values, "
-                    f"but it is of type {type(value)}."
-                )
-
-            if len(value) != 2:
-                raise ValueError(
-                    f"Expected '{name}' to be a 2-tuple of real numeric values, "
-                    f"but it is of length {len(value)}."
-                )
-
-            return tuple(  # type: ignore
-                get_validated_real_numeric(
-                    value=value,
-                    name=f"{name}[{index}]",
-                )
-                for index, value in enumerate(value)
-            )
-
         # --- Input Validation ---
 
-        x_compute_limit = get_validated_real_numeric(
-            value=x_compute_limit,
+        if not isinstance_incl_none(figure, (ApodizationWithFourierPlot, None)):
+            raise TypeError(
+                f"Expected 'figure' to be of type 'ApodizationWithFourierPlot' or "
+                f"None, but it is of type {type(figure)}."
+            )
+
+        apodization_x_compute_limits = get_validated_real_numeric(
+            value=apodization_x_compute_limits,
             name="x_compute_limit",
             min_value=1.0,
             min_inclusive=True,
         )
 
-        x_num_points = get_validated_integer(
-            value=x_num_points,
+        apodization_num_points = get_validated_integer(
+            value=apodization_num_points,
             name="x_num_points",
             min_value=100,
             min_inclusive=True,
         )
 
-        x_plot_limits = get_validated_plot_limits(
-            value=x_plot_limits,
+        apodization_plot_x_limits = _get_validated_plot_limits(
+            value=apodization_plot_x_limits,
             name="x_plot_limits",
             default_value=(-1.05 * self._x_max, 1.05 * self._x_max),
         )
+        apodization_plot_y_limits = _get_validated_plot_limits(
+            value=apodization_plot_y_limits,
+            name="y_plot_limits",
+            default_value=None,
+        )
 
-        frequency_plot_limits = get_validated_plot_limits(
-            value=frequency_plot_limits,
+        fourier_plot_x_limits = _get_validated_plot_limits(
+            value=fourier_plot_x_limits,
             name="freq_plot_limits",
             default_value=(-10.0 / self._x_max, 10.0 / self._x_max),
         )
+        fourier_plot_y_limits = _get_validated_plot_limits(
+            value=fourier_plot_y_limits,
+            name="fourier_plot_y_limits",
+            default_value=None,
+        )
 
-        if not isinstance(fourier_scale, str):
-            raise TypeError(
-                f"Expected 'fourier_scale' to be of type str, but it is of type "
-                f"{type(fourier_scale)}."
-            )
-
-        fourier_scale = fourier_scale.lower()  # type: ignore
-        if fourier_scale not in {"linear", "log", "db", "decibel"}:
-            raise ValueError(
-                f"Expected 'fourier_scale' to be one of 'linear', 'log', or 'decibel', "
-                f"but it is '{fourier_scale}'."
-            )
+        fourier_scale_internal = FourierYScales.from_string(fourier_y_scale)
 
         # --- Computation ---
 
         (
-            x,
-            y,
+            apodization_x,
+            apodization_y,
             frequencies,
             fourier_transform,
         ) = self.evaluate_with_fourier_transform(
-            x_limit=x_compute_limit,
-            x_num_points=x_num_points,
-            normalize=True,
+            x_limit=apodization_x_compute_limits,
+            x_num_points=apodization_num_points,
             real_fft=False,
         )
 
-        if fourier_scale == "linear":
+        if fourier_scale_internal == FourierYScales.LINEAR:
             fourier_transform = fourier_transform.real
-            fourier_y_label = "Value Y(f)"
-        elif fourier_scale == "log":
+
+        elif fourier_scale_internal in {
+            FourierYScales.LINEAR_ABSOLUTE,
+            FourierYScales.LOGARITHMIC,
+        }:
             fourier_transform = np.abs(fourier_transform.real)
-            fourier_y_label = "Magnitude |Y(f)|"
+
         else:
             fourier_transform = np.abs(fourier_transform.real)
             with np.errstate(divide="ignore"):
@@ -730,85 +765,42 @@ class CustomApodization:
                     fourier_transform / fourier_transform.max()
                 )
 
-            fourier_y_label = "Magnitude |Y(f)| in dB"
-
         # --- Plotting ---
 
-        if use_pyscopee_style and fig is None:
-            apply_pyscopee_plot_style()
-
-        if fig is None:
-            fig, axes = plt.subplots(ncols=2, figsize=fig_size)
-        else:
-            try:
-                axes = np.array(fig.get_axes())
-                if axes.ndim != 1 or axes.size != 2:
-                    raise ValueError()
-
-            except Exception as error:
-                raise ValueError(
-                    "Something is wrong with the provided figure. "
-                    "It is expected to have two axes that can be accessed via "
-                    "'fig.get_axes()[0]' and 'fig.get_axes()[1]'."
-                ) from error
-
-        # plot the apodization function
+        # the data is stored for plotting them later
         if apodization_line_kwargs is None:
-            apodization_line_kwargs = {"color": "red"}
+            apodization_line_kwargs = dict()
 
-        x_plot_indices = np.where((x >= x_plot_limits[0]) & (x <= x_plot_limits[1]))[0]
-        axes[0].plot(
-            x[x_plot_indices],
-            y[x_plot_indices],
-            **apodization_line_kwargs,
-        )
-        axes[0].set_xlabel("Time/Space x")
-        axes[0].set_ylabel("Value y(x)")
-        axes[0].set_xlim(*x_plot_limits)
-
-        # plot the Fourier transform
         if fourier_line_kwargs is None:
             fourier_line_kwargs = apodization_line_kwargs
 
-        frequencies = np.fft.fftshift(frequencies)
-        fourier_transform = np.fft.fftshift(fourier_transform)
-        freq_plot_indices = np.where(
-            (frequencies >= frequency_plot_limits[0])
-            & (frequencies <= frequency_plot_limits[1])
-        )[0]
+        with pyscopee_plot_style(enable=use_pyscopee_style):
+            if figure is None:
+                figure = ApodizationWithFourierPlot.create(
+                    figsize=figsize,
+                )
 
-        axes[1].plot(
-            frequencies[freq_plot_indices],
-            fourier_transform[freq_plot_indices],
-            **fourier_line_kwargs,
-        )
-        axes[1].set_xlabel("Frequency f")
-        axes[1].yaxis.tick_right()
-        axes[1].yaxis.set_label_position("right")
-        axes[1].set_ylabel(fourier_y_label)
-        axes[1].set_xlim(*frequency_plot_limits)
+                figure.apodization_x_limits = apodization_plot_x_limits
+                figure.apodization_y_limits = apodization_plot_y_limits
+                figure.fourier_x_limits = fourier_plot_x_limits
+                figure.fourier_y_limits = fourier_plot_y_limits
+                figure.fourier_y_scale = fourier_scale_internal
 
-        if fourier_scale == "log":
-            axes[1].set_yscale("log")
+            # NOTE: this operation performs the actual plotting/plot updates
+            figure.plot(
+                data=PlotDataForApodizationWithFourier(
+                    apodization_name=self._name,
+                    latex_representation=self.latex_representation,
+                    apodization_x=apodization_x,
+                    apodization_y=apodization_y,
+                    apodization_line_kwargs=apodization_line_kwargs,
+                    fourier_x=np.fft.fftshift(frequencies),
+                    fourier_y=np.fft.fftshift(fourier_transform),
+                    fourier_line_kwargs=fourier_line_kwargs,
+                )
+            )
 
-        fig.suptitle(f"{self._name}", fontsize=16, fontweight="bold", y=0.99)
-
-        # the equation is written above the first plot, but only if it is available
-        latex_representation = self.latex_representation
-        if len(latex_representation) == 0:
-            return fig, axes[0], axes[1]
-
-        axes[0].text(
-            x=0.5,
-            y=0.92,
-            s=self.latex_representation,
-            horizontalalignment="center",
-            verticalalignment="center",
-            transform=fig.transFigure,
-            fontsize=13,
-        )
-
-        return fig, axes[0], axes[1]
+        return figure
 
 
 class Boxcar(CustomApodization):
@@ -964,23 +956,25 @@ class ZeroMappedHyperbolicSine(CustomApodization):
 # #     fourier_scale="decibel",
 # # )
 # # # apo._plot_equation()
-# apo = ZeroMappedHyperbolicSine(exponent=0.1)
-# apo.plot(
-#     x_num_points=500_001,
-#     fourier_scale="decibel",
+# apo = ZeroMappedHyperbolicSine(exponent=0.0)
+# gr = apo.plot(
+#     apodization_num_points=500_001,
+#     fourier_y_scale="log",
 # )
 # # # apo._plot_equation()
 # print(boxcar(x=0.5, x_max=1.0))
-# apo = Boxcar()
-# apo.plot(
-#     x_num_points=500_001,
-#     fourier_scale="decibel",
-# )
-# # apo._plot_equation()
+# for i in range(8):
+#     apo = ZeroMappedHyperbolicSine(exponent=2 * i + 2)
+#     apo.plot(
+#         x_num_points=500_001,
+#         fourier_y_scale="decibel",
+#         figure=gr,
+#     )
+# apo._plot_equation()
 # apo = Triangular()
 # apo.plot(
-#     x_num_points=500_001,
-#     fourier_scale="db",
+#     apodization_num_points=500_001,
+#     fourier_y_scale="db",
 # )
 
 # apo = CustomApodization(
@@ -995,4 +989,6 @@ class ZeroMappedHyperbolicSine(CustomApodization):
 #     fourier_scale="linear",
 #     apodization_line_kwargs={"color": "green"},
 # )
+# from matplotlib import pyplot as plt
+
 # plt.show()
