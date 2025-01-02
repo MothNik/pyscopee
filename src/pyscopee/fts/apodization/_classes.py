@@ -251,6 +251,15 @@ class CustomApodization:
         convert it to one.
         If ``None``, the apodization function is set to a placeholder that raises a
         :class:`NotImplementedError` when called.
+    eval_params : (:class:`str`, ...), default=``(,)``
+        The names of the additional parameters of the apodization function that need
+        to be passed to the :func:`evaluator` function.
+        If the apodization function takes additional parameters besides ``x`` and
+        ``x_max``, they have to provided and also set as attributes or properties of the
+        class.
+        For example, if the apodization function has a parameter ``parameter``, the
+        tuple ``("parameter",)`` has to be provided and the attribute or property
+        ``parameter`` has to be added to the class.
     latex_representation : :class:`str` or ``None``, default=``None``
         The LaTeX representation of the apodization function that can be used in plots.
         No checks are made on the validity of the LaTeX representation.
@@ -345,7 +354,6 @@ class CustomApodization:
 
     _latex_start: str = r"$f\left(x\right)\ =\ "
     _latex_stop: str = r"\text{     for }-x_{max}\leq x\leq x_{max}$"
-    _call_params: Tuple[str, ...] = tuple()
 
     # --- Constructor ---
 
@@ -354,6 +362,7 @@ class CustomApodization:
         x_max: RealNumeric = 1.0,
         name: Optional[str] = None,
         evaluator: Union[Callable, WrappedApodizationFunction, None] = None,
+        eval_params: Tuple[str, ...] = tuple(),
         latex_representation: Optional[str] = None,
         latex_auto_complete: bool = True,
     ) -> None:
@@ -363,6 +372,7 @@ class CustomApodization:
         self._evaluator: WrappedApodizationFunction = _get_validated_evaluator(
             evaluator=evaluator,
         )
+        self._eval_params: Tuple[str, ...] = eval_params
         self._latex_representation: Optional[str] = latex_representation
         self._latex_auto_complete: bool = latex_auto_complete
 
@@ -378,7 +388,7 @@ class CustomApodization:
 
         """
 
-        call_kwargs = {key.lstrip("_"): getattr(self, key) for key in self._call_params}
+        call_kwargs = {key: getattr(self, f"{key}") for key in self._eval_params}
 
         return call_kwargs
 
@@ -830,6 +840,7 @@ class Boxcar(CustomApodization):
             x_max=x_max,
             name=None,
             evaluator=boxcar,
+            eval_params=tuple(),
             latex_representation=r"1",
             latex_auto_complete=True,
         )
@@ -864,6 +875,7 @@ class Triangular(CustomApodization):
             x_max=x_max,
             name=None,
             evaluator=triangular,
+            eval_params=tuple(),
             latex_representation=r"1-|\frac{x}{x_{max}}|",
             latex_auto_complete=True,
         )
@@ -901,10 +913,6 @@ class ZeroMappedHyperbolicSine(CustomApodization):
 
     """
 
-    # --- Class attributes ---
-
-    _call_params: Tuple[str, ...] = ("_exponent",)
-
     # --- Constructor ---
 
     def __init__(
@@ -922,6 +930,7 @@ class ZeroMappedHyperbolicSine(CustomApodization):
                 r"{\left(\sinh\left(1\right)\right)^{exponent}}"
             ),
             evaluator=zero_mapped_hyperbolic_sine,
+            eval_params=("exponent",),
             latex_auto_complete=True,
         )
 

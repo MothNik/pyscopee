@@ -26,9 +26,11 @@ __all__ = [
 # === Imports ===
 
 
+import ast
 import inspect
+import textwrap
 from functools import wraps
-from typing import Protocol, Union
+from typing import Callable, Protocol, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -98,6 +100,216 @@ def get_validated_xmax(x_max: RealNumeric) -> float:
     )
 
 
+def _validate_apodization_function_signature(function: Callable) -> None:
+    """
+    Validates the signature of an apodization function.
+
+    Parameters
+    ----------
+    function : callable
+        The function to validate.
+
+    Raises
+    ------
+    TypeError
+        If the given function is not a function.
+    ValueError
+        If the given function does not have the correct signature in terms of the
+        positional and keyword arguments.
+    ValueError
+        If the default value of ``x_max`` is not ``1.0``.
+
+    """
+
+    # --- Constants ---
+
+    REFERENCE_SIGNATURE_MESSAGE = textwrap.dedent(
+        """
+        The apodization function is expected to have the following signature:
+
+        ```python
+        def {function_name}(
+            x: RealNumericArrayLike,
+            x_max: RealNumeric = 1.0,  # ← mandatory default value
+            *,  # ← mandatory enforcement of keyword-only arguments
+            ...  # ← additional keyword arguments required by the apodization function
+            skip_validation: bool = False,
+        ) -> NDArray[np.float64]:
+            ...
+        ```
+        """
+    )
+
+    # --- Signature Validation ---
+
+    if not inspect.isfunction(function):
+        raise TypeError(
+            f"The given apodization function '{function}' is not a function."
+        )
+
+    # it is ensured that the function has the correct signature
+    function_name = function.__name__
+    signature = inspect.signature(function)
+    required_parameters = [
+        "x",
+        "x_max",
+        "skip_validation",
+    ]
+
+    # a fast check is performed to see if all required parameters are present
+    missing_parameters = set(required_parameters) - set(signature.parameters)
+    if len(missing_parameters) > 0:
+        missing_parameters = sorted([f"'{name}'" for name in missing_parameters])
+        raise ValueError(
+            f"The apodization function '{function_name}' is missing the following "
+            f'required parameters:\n{", ".join(missing_parameters)}\n\n'
+            + REFERENCE_SIGNATURE_MESSAGE.format(function_name=function_name),
+        )
+
+    # it needs to be ensured that ``x`` is the first positional or keyword argument
+    # and ``x_max`` is the second one
+    parameter_names = list(signature.parameters.keys())
+    for position, reference_name in enumerate(("x", "x_max")):
+        if parameter_names[position] != reference_name:
+            raise ValueError(
+                f"The apodization function '{function_name}' is expected to have "
+                f"'{reference_name}' as the {position + 1}. parameter, but "
+                f"'{parameter_names[position]}' is in this position.\n\n"
+                + REFERENCE_SIGNATURE_MESSAGE.format(function_name=function_name),
+            )
+
+        parameter = signature.parameters[reference_name]
+        if parameter.kind not in {
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.POSITIONAL_ONLY,
+        }:
+            raise ValueError(
+                f"The parameter '{reference_name}' of the apodization function "
+                f"'{function_name}' has to be a positional or keyword argument.\n\n"
+                + REFERENCE_SIGNATURE_MESSAGE.format(function_name=function_name),
+            )
+
+    # afterwards, all other parameters are checked for being keyword-only arguments
+    for name, parameter in signature.parameters.items():
+        if name in {"x", "x_max"}:
+            continue
+
+        # for all other parameters, it is ensured that they are keyword-only arguments
+        if parameter.kind != inspect.Parameter.KEYWORD_ONLY:
+            raise ValueError(
+                f"The parameter '{name}' of the apodization function '{function_name}' "
+                f"has to be a keyword-only argument.\n\n"
+                + REFERENCE_SIGNATURE_MESSAGE.format(function_name=function_name),
+            )
+
+    # finally, it is ensured that the default value of ``x_max`` is ``1.0``
+    x_max_default = signature.parameters["x_max"].default
+    if x_max_default != 1.0:
+        if x_max_default is not inspect.Parameter.empty:
+            x_max_default_str = f"'{x_max_default}'"
+        else:
+            x_max_default_str = "not provided"
+
+        raise ValueError(
+            f"The default value of 'x_max' in the apodization function "
+            f"'{function_name}' has to be '1.0', but it is {x_max_default_str}.\n\n"
+            + REFERENCE_SIGNATURE_MESSAGE.format(function_name=function_name),
+        )
+
+    return
+
+
+def _ensure_variable_is_not_used_in_function(
+    function: Callable,
+    variable_name: str,
+) -> None:
+    """
+    Ensures that a variable is not used in the computation of a function.
+
+    Parameters
+    ----------
+    function : callable
+        The function to check.
+    variable_name : :class:`str`
+        The name of the variable to check.
+
+    Raises
+    ------
+    ValueError
+        If the variable is used in the computations of the function.
+
+    """
+
+    # the code is parsed to an AST to check if the variable is used
+    function_source = inspect.getsource(function)
+    function_ast = ast.parse(function_source)
+
+    # every node in the AST is checked if it is a variable access and if it is the
+    # variable that should not be used
+    offending_line_number = None
+    for node in ast.walk(function_ast):
+        if isinstance(node, ast.Name) and node.id == variable_name:
+            offending_line_number = node.lineno
+            break
+
+    # if the variable is not accessed, the function is valid
+    if offending_line_number is None:
+        return
+
+    # NOTE: the following might not be very efficient, but it is only used for raising
+    #       an error and not for the actual computation of the function
+    # if the variable is accessed, the offending code lines are extracted
+    function_source = function_source.split("\n")
+    function_source = function_source[
+        max(0, offending_line_number - 5) : min(
+            offending_line_number + 5, len(function_source)
+        )
+    ]
+
+    # for a detailed error message, the file name and absolute line number of the
+    # offending code are determined
+    function_file_name = inspect.getfile(function)
+    offending_line_number_in_file = (
+        function.__code__.co_firstlineno + offending_line_number - 1
+    )
+
+    # finally, the accesses to ``x_max`` are found in the offending code and emphasized
+    # for an error message
+    offending_code_lines = ""
+    for line in function_source:
+        # it is found if the variable name is used in a comment or actually valid code
+        if variable_name not in line:
+            offending_code_lines += f"{line}\n"
+            continue
+
+        # if a "#" is found before the variable name, it is a comment and the variable
+        # is not used in the code
+        if "#" in line:
+            if line.index("#") < line.index(variable_name):
+                offending_code_lines += f"{line}\n"
+                continue
+
+        # the variable name is emphasized in the error message (bold, underlined, and
+        # with red color)
+        line = line.replace(
+            variable_name,
+            f"\033[4m\033[1m\033[91m> > > {variable_name} < < <\033[0m",
+        )
+
+        offending_code_lines += f"{line}\n"
+
+    raise ValueError(
+        f"The variable '{variable_name}' is not allowed to be accessed in the "
+        f"computation of the apodization function '{function.__name__}'.\n\n"
+        f"Any handling of '{variable_name}' is already done by the decorator "
+        f"\033[1m'as_apodization_function'\033[0m.\n\n"
+        f"The following code accesses '{variable_name}':\n\n"
+        f"File: {function_file_name}\n"
+        f"Line: {offending_line_number_in_file}\n\n"
+        f"{offending_code_lines}",
+    )
+
+
 # === Functions ===
 
 
@@ -124,13 +336,17 @@ def _convert_to_validated_apodization_function(
         ```python
         def apodization_function(
             x: RealNumericArrayLike,
-            x_max: RealNumeric,
-            *,  # <- mandatory enforcement of keyword-only arguments
-            ...  # <- additional keyword arguments required by the apodization function
+            x_max: RealNumeric = 1.0,  # ← mandatory default value
+            *,  # ← mandatory enforcement of keyword-only arguments
+            ...  # ← additional keyword arguments required by the apodization function
             skip_validation: bool = False,
         ) -> NDArray[np.float64]:
             ...
         ```
+
+    Even though ``x_max`` is required to be the second argument, the decorator will
+    internally scale the interval ``[-1, 1]`` to ``[-x_max, x_max]``. So, ``x_max``
+    may not be used in the computation of the apodization function.
 
     So for example, the ``boxcar`` function would be defined as:
 
@@ -240,6 +456,8 @@ def as_apodization_function(
         If the given function is not a function.
     ValueError
         If the given function is not a valid apodization function.
+    ValueError
+        If ``x_max`` is accessed in the computation of the apodization function.
 
     Notes
     -----
@@ -263,13 +481,17 @@ def as_apodization_function(
         ```python
         def apodization_function(
             x: RealNumericArrayLike,
-            x_max: RealNumeric,
-            *,  # <- mandatory enforcement of keyword-only arguments
-            ...  # <- additional keyword arguments required by the apodization function
+            x_max: RealNumeric = 1.0, # ← mandatory default value
+            *,  # ← mandatory enforcement of keyword-only arguments
+            ...  # ← additional keyword arguments required by the apodization function
             skip_validation: bool = False,
         ) -> NDArray[np.float64]:
             ...
         ```
+
+    Even though ``x_max`` is required to be the second argument, the decorator will
+    internally scale the interval ``[-1, 1]`` to ``[-x_max, x_max]``. So, ``x_max``
+    may not be used in the computation of the apodization function.
 
     So for example, the ``boxcar`` function would be defined as:
 
@@ -303,54 +525,20 @@ def as_apodization_function(
 
     """
 
-    if not inspect.isfunction(apodization_function):
-        raise TypeError(
-            f"The given apodization function '{apodization_function}' is "
-            f"not a function."
-        )
+    # --- Signature Validation ---
 
-    # it is ensured that the function has the correct signature
-    function_name = apodization_function.__name__
-    signature = inspect.signature(apodization_function)
-    required_parameters = [
-        "x",
-        "x_max",
-        "skip_validation",
-    ]
+    _validate_apodization_function_signature(function=apodization_function)
 
-    for name, parameter in signature.parameters.items():
-        # if the parameter is a required one, it is removed from the list of required
-        # parameters to check if all required parameters are present afterwards
-        if name in required_parameters:
-            required_parameters.remove(name)
+    # --- x_max Access Validation ---
 
-        # it is ensured that the function has ``x`` and ``x_max`` as the first and
-        # second parameter, respectively
-        if name in {"x", "x_max"}:
-            if parameter.kind not in {
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                inspect.Parameter.POSITIONAL_ONLY,
-            }:
-                raise ValueError(
-                    f"The parameter '{name}' of the apodization function "
-                    f"'{function_name}' has to be a positional or keyword argument.",
-                )
+    # this part is tricky because the function's source code is needed to check if
+    # ``x_max`` is accessed in the computation of the apodization function
+    _ensure_variable_is_not_used_in_function(
+        function=apodization_function,
+        variable_name="x_max",
+    )
 
-            continue
-
-        # for all other parameters, it is ensured that they are keyword-only arguments
-        if parameter.kind != inspect.Parameter.KEYWORD_ONLY:
-            raise ValueError(
-                f"The parameter '{name}' of the apodization function '{function_name}' "
-                f"has to be a keyword-only argument.",
-            )
-
-    # if any of the required parameters has not been found, an error is raised
-    if len(required_parameters) > 0:
-        raise ValueError(
-            f"The apodization function '{function_name}' is missing the following "
-            f'required parameters:\n{", ".join(required_parameters)}.',
-        )
+    # --- Wrapping ---
 
     wrapped_apodization_function = _convert_to_validated_apodization_function(
         apodization_function=apodization_function
