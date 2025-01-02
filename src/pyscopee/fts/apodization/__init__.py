@@ -16,6 +16,7 @@ from ._classes import (  # noqa: F401
 from ._functions import (  # noqa: F401
     as_apodization_function,
     boxcar,
+    print_apodization_function_template,
     triangular,
     zero_mapped_hyperbolic_sine,
 )

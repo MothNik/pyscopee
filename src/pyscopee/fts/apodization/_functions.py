@@ -19,6 +19,7 @@ __all__ = [
     "boxcar",
     "get_validated_xmax",
     "not_implemented_apodization",
+    "print_apodization_function_template",
     "triangular",
     "zero_mapped_hyperbolic_sine",
 ]
@@ -30,7 +31,7 @@ import ast
 import inspect
 import textwrap
 from functools import wraps
-from typing import Callable, Protocol, Union
+from typing import Callable, Optional, Protocol, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -549,6 +550,135 @@ def as_apodization_function(
     wrapped_apodization_function.is_validated_apodization_function = True  # type: ignore
 
     return wrapped_apodization_function
+
+
+def print_apodization_function_template(
+    name: Optional[str] = None,
+    with_imports: bool = True,
+) -> None:
+    """
+    Prints a template for an apodization function to the console.
+    This can simply be copied and pasted into a Python file. From there, the function
+    can be implemented.
+
+    As an example, a perfectly functional boxcar apodization function is already
+    implemented. The template is designed to be as flexible as possible and to provide
+    a good starting point for the implementation of an apodization function.
+
+    Special remarks are underlined while the parts where custom code has to be inserted
+    are bold.
+
+    Parameters
+    ----------
+    name : :class:`str`, optional
+        The name of the apodization function.
+        If not provided, the name is set to ``"apodization_function"``.
+    with_imports : :class:`bool`, default=``True``
+        Whether to include the necessary imports for the template or not.
+
+    """
+
+    import_str = ""
+    pyscopee_access_str = ""
+    if with_imports:
+        import_str = textwrap.dedent(
+            """
+                # === Imports ===
+
+                import numpy as np
+                from numpy.typing import NDArray
+
+                import pyscopee as psc
+
+                # === Function ===
+
+            """
+        )
+        pyscopee_access_str = "psc."
+
+    template = textwrap.dedent(
+        """
+            {import_str}def {name}(
+                x: {pyscopee_access_str}RealNumericArrayLike,
+                x_max: {pyscopee_access_str}RealNumeric = 1.0,
+                *,
+                \033[1m# Insert additional keyword-only arguments here.\033[0m
+                skip_validation: bool = False,
+            ) -> NDArray[np.float64]:
+                \"\"\"
+                \033[1mInsert the description of the apodization function here.\033[0m
+
+                Parameters
+                ----------
+                x : Array-like of shape (n,)
+                    The points at which to evaluate the apodization function.
+                    Negative entries are converted to positive ones under the assumption that
+                    the apodization function has even symmetry.
+                    Its length has to be at least 1.
+                    It is internally promoted to ``np.float64``.
+                x_max : :class:`float` or :class:`int`, default=``1.0``
+                    The maximum value of the x-range over which the apodization function is
+                    defined.
+                    It must be a positive real number ``> 0``.
+                    With this, the x-range of ``[-1, 1]`` where apodization functions are
+                    typically defined is scaled to ``[-x_max, x_max]``.
+
+                \033[1mInsert additional keyword-only arguments here.\033[0m
+
+                skip_validation : :class:`bool`, default=``False`` (keyword-only)
+                    Whether to skip the input validation of ``x_max`` (``True``) or not
+                    (``False``).
+                    ``x`` is always validated.
+                    This variable is meant for internal use only and it is highly
+                    discouraged to set it to ``True``.
+
+                Returns
+                -------
+                apodization_values : :class:`numpy.ndarray` of shape (n,) of dtype ``np.float64``
+                    The values of the apodization function at the given points.
+
+                \"\"\"  # noqa: E501
+
+                \033[4m# It is not allowed to access ``x_max`` in the computation of the apodization\033[0m
+                \033[4m# function. The decorator will handle ``x_max`` before the function is even\033[0m
+                \033[4m# called.\033[0m
+
+                # --- Input Validation ---
+
+                if not skip_validation:
+                    \033[1m# Insert input validation here.\033[0m
+                    \033[1m# The decorator already validates ``x`` and ``x_max``.\033[0m
+                    pass
+
+                # --- Computation ---
+
+                \033[1m# Insert computation here.\033[0m
+
+                \033[1m# The apodization function only needs to be computed on the interval [0, 1]
+                # where x = 0 is the center of the apodization and x = 1 is the right boundary
+                # where it fades out (not necessarily to zero). Symmetry implies that x = -1 is
+                # the left boundary analogous to x = 1.
+                # Outside this interval, the apodization function will be zeroed automatically
+                # independent of what this function would return.
+                # The decorator will handle the symmetry f(-x) = f(x) and the scaling to
+                # [-x_max, x_max].\033[0m
+
+                \033[1m# The following is a dummy return statement that results in a boxcar
+                # apodization\033[0m
+                \033[1mreturn np.ones_like(x, dtype=np.float64)\033[0m
+
+            """  # noqa: E501
+    )
+
+    print(
+        template.format(
+            name=name if name is not None else "apodization_function",
+            import_str=import_str,
+            pyscopee_access_str=pyscopee_access_str,
+        )
+    )
+
+    return
 
 
 @as_apodization_function
