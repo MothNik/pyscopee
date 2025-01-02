@@ -579,7 +579,6 @@ def print_apodization_function_template(
     """
 
     import_str = ""
-    pyscopee_access_str = ""
     if with_imports:
         import_str = textwrap.dedent(
             """
@@ -594,13 +593,12 @@ def print_apodization_function_template(
 
             """
         )
-        pyscopee_access_str = "psc."
 
     template = textwrap.dedent(
         """
             {import_str}def {name}(
-                x: {pyscopee_access_str}RealNumericArrayLike,
-                x_max: {pyscopee_access_str}RealNumeric = 1.0,
+                x: psc.RealNumericArrayLike,
+                x_max: psc.RealNumeric = 1.0,
                 *,
                 \033[1m# Insert additional keyword-only arguments here.\033[0m
                 skip_validation: bool = False,
@@ -637,6 +635,11 @@ def print_apodization_function_template(
                 apodization_values : :class:`numpy.ndarray` of shape (n,) of dtype ``np.float64``
                     The values of the apodization function at the given points.
 
+                Notes
+                -----
+                \033[1mInsert additional notes on the definition of the apodization function
+                here.\033[0m
+
                 \"\"\"  # noqa: E501
 
                 \033[4m# It is not allowed to access ``x_max`` in the computation of the apodization\033[0m
@@ -665,16 +668,22 @@ def print_apodization_function_template(
 
                 \033[1m# The following is a dummy return statement that results in a boxcar
                 # apodization\033[0m
+                \033[1m# A ``# type: ignore`` is needed because the type checker does not recognize
+                # that the decorator performs all the required type conversions\033[0m
                 \033[1mreturn np.ones_like(x, dtype=np.float64)\033[0m
 
             """  # noqa: E501
     )
 
+    if name is not None:
+        name = name.lower()
+    else:
+        name = "apodization_function"
+
     print(
         template.format(
-            name=name if name is not None else "apodization_function",
+            name=name,
             import_str=import_str,
-            pyscopee_access_str=pyscopee_access_str,
         )
     )
 
@@ -704,7 +713,7 @@ def boxcar(
     skip_validation: bool = False,
 ) -> NDArray[np.float64]:
     """
-    Computes the values of the boxcar function at the given points.
+    Computes the values of the boxcar apodization function at the given points.
 
     Parameters
     ----------
@@ -749,7 +758,7 @@ def triangular(
     skip_validation: bool = False,
 ) -> NDArray[np.float64]:
     """
-    Computes the values of the triangular function at the given points.
+    Computes the values of the triangular apodization function at the given points.
 
     Parameters
     ----------
@@ -796,7 +805,8 @@ def zero_mapped_hyperbolic_sine(
     skip_validation: bool = False,
 ) -> NDArray[np.float64]:
     """
-    Computes the values of the zero-mapped hyperbolic sine function at the given points.
+    Computes the values of the zero-mapped hyperbolic sine apodization function at the
+    given points.
 
     Parameters
     ----------
@@ -831,7 +841,9 @@ def zero_mapped_hyperbolic_sine(
     -----
     The zero-mapped hyperbolic sine function is defined as
 
-    ``f(x) = (sinh(1 - (x / x_max)**2))**exponent / (sinh(1))**exponent``
+    ```
+    f(x) = (sinh(1 - (x / x_max)**2))**exponent / (sinh(1))**exponent
+    ```
 
     within the interval ``[-x_max, x_max]``. At the boundaries, the function fades out
     to zero in a second order continuous manner (i.e., the function and its first
