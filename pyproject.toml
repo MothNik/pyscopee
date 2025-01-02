@@ -16,7 +16,7 @@ dynamic = ["version", "readme", "dependencies", "optional-dependencies"]
 
 [tool.setuptools]
 include-package-data = true
-package-data = {"*" = ["AUTHORS.txt", "VERSION.txt"]}
+package-data = {"*" = ["AUTHORS.txt", "VERSION.txt", "_utils/pyscopee.mplstyle"]}
 
 [tool.setuptools.dynamic]
 version = {file = "src/pyscopee/VERSION.txt"}
