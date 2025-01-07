@@ -138,6 +138,10 @@ def _validate_apodization_function_signature(function: Callable) -> None:
         ) -> NDArray[np.float64]:
             ...
         ```
+
+        For an exhaustive template to copy and paste into a Python file, just call
+        ``pyscopee.print_apodization_function_template()``.
+
         """
     )
 
