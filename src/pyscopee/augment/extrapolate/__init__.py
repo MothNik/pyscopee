@@ -11,4 +11,8 @@ Currently, the following methods are implemented:
 
 # === Imports ===
 
-from ._extrapolate import arburg, extrapolate_autoregressive  # noqa: F401
+from ._extrapolate import (  # noqa: F401
+    ar_ordinary_least_squares,
+    arburg,
+    extrapolate_autoregressive,
+)

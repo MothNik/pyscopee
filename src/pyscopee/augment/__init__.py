@@ -9,4 +9,8 @@ This module provides functions for augmenting data, e.g.,
 
 # === Imports ===
 
-from .extrapolate import arburg, extrapolate_autoregressive  # noqa: F401
+from .extrapolate import (  # noqa: F401
+    ar_ordinary_least_squares,
+    arburg,
+    extrapolate_autoregressive,
+)

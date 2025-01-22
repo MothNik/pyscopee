@@ -14,6 +14,7 @@ Currently, the following extrapolation methods are available:
 
 __all__ = [
     "arburg",
+    "ar_ordinary_least_squares",
     "extrapolate_autoregressive",
 ]
 
@@ -31,6 +32,9 @@ from ..._utils import (
     get_validated_real_numeric,
     get_validated_real_numeric_1d_array_like,
     warn_verbose,
+)
+from ._autoregressive_base import (
+    ar_one_step_least_squares as _ar_one_step_least_squares,
 )
 from ._autoregressive_base import arburg_fast as _arburg_fast
 from ._autoregressive_base import (
@@ -352,6 +356,8 @@ def arburg(
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
         ``1.0``.
+        Its ``i``-th element corresponds to the coefficient of the ``i``-th lag
+        starting from ``0`` for the zero-lag coefficient.
 
     Raises
     ------
@@ -402,6 +408,110 @@ def arburg(
         x_lens=x_lens,
         order=order,
         tikhonov_lambda=tikhonov_lambda,
+    )
+
+
+def ar_ordinary_least_squares(
+    xs: Union[ArrayLike, List[ArrayLike], Tuple[ArrayLike, ...]],
+    order: Integer = 1,
+    rcond: Optional[RealNumeric] = None,
+) -> NDArray[np.float64]:
+    """
+    Computes the AR coefficients for an autoregressive model using an Ordinary Least
+    Squares (OLS) approach based on a (truncated) Singular Value Decomposition (SVD).
+
+    If available at runtime, a Numba-accelerated implementation is used instead of the
+    NumPy-based one.
+
+    Parameters
+    ----------
+    xs : Array-like of shape (n,) or (m, n) or list or tuple of (n_i,)-Array-likes
+        The real input signal (segments) for which the AR coefficients are to be
+        computed.
+        2D-ArrayLikes are interpreted as row-wise stacked segments.
+        If multiple segments are provided, they are treated as individual segments of
+        a single signal and the resulting AR model will minimise the forward and
+        backward prediction errors over all segments combined. However, this does not
+        mean that the AR model is fitted to the concatenated signal, i.e., no forward
+        or backward prediction is performed across the segments.
+        Its/their data type is internally promoted to ``numpy.float64``.
+        Each of them must hold at least ``2`` elements.
+    order : :class:`int`, default=``1``
+        The order of the autoregressive model.
+        It has to be within the range ``[1, min(len(xs[i]) - 1)]`` for all ``xs[i]``.
+        rcond : :class:`float`
+    rcond : :class:`float` or :class:`int` or ``None``, default=``None``
+        The cutoff ratio for small singular values. Singular values smaller than
+        ``rcond * max(singular_values)`` are treated as zero.
+        If provided, it has to be a positive value in the interval ``(0.0, 1.0)``.
+        If ``None``, the NumPy convention for :func:`np.linalg.lstsq` is used, i.e.,
+        ``rcond = num_equations * eps(float64)`` where ``num_equations`` is the number
+        of equations in the resulting linear system and ``eps(float64)`` is the machine
+        epsilon for ``float64``.
+
+    Returns
+    -------
+    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
+        The AR coefficients of the autoregressive model.
+        To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
+        included in the output as the first element ``a_prediction[0]`` which is always
+        ``1.0``.
+        Its ``i``-th element corresponds to the coefficient of the ``i``-th lag
+        starting from ``0`` for the zero-lag coefficient.
+
+    Raises
+    ------
+    TypeError
+        If ``xs``, ``order``, or ``rcond`` are not of the expected type.
+    ValueError
+        If ``xs`` is an empty Array-like.
+    ValueError
+        If ``xs``is not a real numeric 1D Array-like or iterable of real numeric 1D
+        Array-likes with the expected size.
+    ValueError
+        If ``order`` or ``rcond`` are not within the allowed range.
+
+
+    """  # noqa: E501
+
+    # --- Input Validation ---
+
+    xs, x_lens = _prepare_x_segments_for_ar_fit(xs=xs)
+
+    order = get_validated_integer(
+        value=order,
+        name="order",
+        min_value=1,
+        max_value=int(np.min(x_lens) - 1),
+    )
+
+    # if the ``rcond`` is not provided, the NumPy convention for ``np.linalg.lstsq`` is
+    # used and for this, the number of equations is needed
+    # NOTE: the factor of 2 is required because the AR model is fitted in the forward
+    #       and backward direction
+    num_equations = 2 * (x_lens.sum() - x_lens.size * order)
+    if rcond is None:
+        rcond = num_equations * np.finfo(np.float64).eps
+
+    rcond = get_validated_real_numeric(
+        value=rcond,
+        name="rcond",
+        min_value=0.0,
+        min_inclusive=False,
+        max_value=1.0,
+        max_inclusive=False,
+    )
+
+    # --- Computation ---
+
+    # depending on the choice of the user, the Numba-accelerated or the NumPy-based
+    # implementation is used
+    return _ar_one_step_least_squares(
+        xs=xs,
+        x_lens=x_lens,
+        order=order,
+        num_equations=num_equations,
+        rcond=rcond,
     )
 
 

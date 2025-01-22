@@ -131,7 +131,8 @@ def arburg_fast(
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
         ``1.0``.
-        Its ``i``-th element corresponds to the coefficient of the ``i``-th lag.
+        Its ``i``-th element corresponds to the coefficient of the ``i``-th lag
+        starting from ``0`` for the zero-lag coefficient.
 
     References
     ----------
@@ -243,7 +244,7 @@ def arburg_fast(
 
 
 @jit(
-    "Tuple((float64[:,:], float64[:]))(float64[:,:], int64[:], int64)",
+    "Tuple((float64[:,:], float64[:]))(float64[:,:], int64[:], int64, int64)",
     nopython=True,
     cache=True,
 )
@@ -251,6 +252,7 @@ def _make_ar_one_step_least_squares_system(
     xs: NDArray[np.float64],
     x_lens: NDArray[np.int64],
     order: int,
+    num_equations: int,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """
     Constructs the left-hand side ``A`` and right-hand side vector ``b`` of the
@@ -274,6 +276,8 @@ def _make_ar_one_step_least_squares_system(
         ``x_lens[i]`` gives the number of usable elements in ``xs[i, ::]``.
     order : :class:`int`
         The order of the autoregressive model.
+    num_equations : :class:`int`
+        The number of equations in the least-squares system.
 
     Returns
     -------
@@ -285,13 +289,11 @@ def _make_ar_one_step_least_squares_system(
     """  # noqa: E501
 
     # the left-hand side matrices need to be concatenated by using sliding window views
-    # of the input signal segments
-    # NOTE: the factor 2 is required for the forward and backward prediction errors
-    lhs_num_rows = 2 * (x_lens.sum() - x_lens.size * order)
-    lhs_matrix = np.empty(shape=(lhs_num_rows, order), dtype=np.float64)
+    # of the input signal segments, each window of size ``order``
+    lhs_matrix = np.empty(shape=(num_equations, order), dtype=np.float64)
     # the right-hand side matrix is simply the input signal segments with the first
-    # order elements removed
-    rhs_vector = np.empty(shape=(lhs_num_rows,), dtype=np.float64)
+    # ``order`` elements removed
+    rhs_vector = np.empty(shape=(num_equations,), dtype=np.float64)
 
     # the left and right hand side are filled by means of a simple loop for the forward
     # predictions
@@ -329,7 +331,7 @@ def _make_ar_one_step_least_squares_system(
 
 
 @jit(
-    "float64[:](float64[:,:], int64[:], int64, float64)",
+    "float64[:](float64[:,:], int64[:], int64, int64, float64)",
     nopython=True,
     cache=True,
 )
@@ -337,12 +339,13 @@ def ar_one_step_least_squares(
     xs: NDArray[np.float64],
     x_lens: NDArray[np.int64],
     order: int,
+    num_equations: int,
     rcond: float,
 ) -> NDArray[np.float64]:
     """
     Computes the AR coefficients for a one-step-ahead autoregressive model using a
-    an Ordinary Least Squares (OLS) approach based on a (truncated) singular value
-    decomposition (SVD).
+    an Ordinary Least Squares (OLS) approach based on a (truncated) Singular Value
+    Decomposition (SVD).
 
     Parameters
     ----------
@@ -358,6 +361,8 @@ def ar_one_step_least_squares(
         ``x_lens[i]`` gives the number of usable elements in ``xs[i, ::]``.
     order : :class:`int`
         The order of the autoregressive model.
+    num_equations : :class:`int`
+        The number of equations in the least-squares system.
     rcond : :class:`float`
         The cutoff ratio for small singular values. Singular values smaller than
         ``rcond * max(singular_values)`` are treated as zero.
@@ -369,7 +374,8 @@ def ar_one_step_least_squares(
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
         ``1.0``.
-        Its ``i``-th element corresponds to the coefficient of the ``i``-th lag.
+        Its ``i``-th element corresponds to the coefficient of the ``i``-th lag
+        starting from ``0`` for the zero-lag coefficient.
 
     """  # noqa: E501
 
@@ -379,13 +385,25 @@ def ar_one_step_least_squares(
         xs=xs,
         x_lens=x_lens,
         order=order,
+        num_equations=num_equations,
     )
 
-    return np.linalg.lstsq(
-        a=lhs_matrix,
-        b=rhs_vector,
-        rcond=rcond,
-    )[0]
+    # NOTE: the addition of the zero-lag coefficient, the flip, and the sign flipping is
+    #       required due to the conventions for the autoregressive coefficients used by
+    #       Matlab's ``arburg`` function
+    a_prediction = np.empty(shape=(order + 1), dtype=np.float64)
+    a_prediction[0] = 1.0
+    a_prediction[1:] = np.negative(
+        np.flip(
+            np.linalg.lstsq(
+                a=lhs_matrix,
+                b=rhs_vector,
+                rcond=rcond,
+            )[0]
+        )
+    )
+
+    return a_prediction
 
 
 @jit(
