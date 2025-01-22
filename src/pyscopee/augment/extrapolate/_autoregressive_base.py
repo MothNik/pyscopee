@@ -10,8 +10,11 @@ using autoregressive models, such as
 
 # === Imports ===
 
+from typing import Literal, Tuple
+
 import numpy as np
 from numpy.typing import NDArray
+from scipy.linalg import solve as scipy_solve
 
 from ..._utils import jit
 
@@ -243,8 +246,11 @@ def arburg_fast(
     return a_prediction
 
 
+# TODO: make this more efficient by adding the partial X.T @ X directly to the left and
+#       right hand side of the least-squares system rather than computing the full
+#       X.T matrix first before the matrix multiplication
 @jit(
-    "Tuple((float64[:,:], float64[:]))(float64[:,:], int64[:], int64, int64)",
+    "Tuple((float64[:,:], float64[:]))(float64[:,:], int64[:], int64, int64, float64)",
     nopython=True,
     cache=True,
 )
@@ -253,11 +259,20 @@ def _make_ar_one_step_least_squares_system(
     x_lens: NDArray[np.int64],
     order: int,
     num_equations: int,
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    tikhonov_lambda: float,
+) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
     """
     Constructs the left-hand side ``A`` and right-hand side vector ``b`` of the
     least-squares ``A @ x ~= b`` system for the one-step-ahead autoregressive model with
     the coefficients ``x``.
+
+    Here,
+
+    - ``A`` is given by ``X.T @ X + lambda * I`` where ``X`` is the design matrix of the
+        autoregressive model, ``lambda`` is the Tikhonov regularisation parameter, and
+        ``I`` is the identity matrix
+    - ``b`` is given by ``X.T @ y`` where ``y`` is the target vector of the
+        autoregressive model
 
     Here, the right hand side ``b`` is just a column vector because only the next
     prediction is computed (i.e., the one-step-ahead model).
@@ -278,12 +293,17 @@ def _make_ar_one_step_least_squares_system(
         The order of the autoregressive model.
     num_equations : :class:`int`
         The number of equations in the least-squares system.
+    tikhonov_lambda : :class:`float`
+        The Tikhonov regularisation parameter lambda. It has to be non-negative
+        (``lam >= 0.0``) and if ``> 0.0``, it will result in Tikhonov regularisation.
+        Values ``< 0.0`` are silently clipped to ``0.0``.
+        Higher values of lambda lead to a more stable solution but may introduce a bias.
 
     Returns
     -------
-    lhs_matrix : :class:`numpy.ndarray` of shape (lhs_num_rows, order) of dtype ``numpy.float64``
-        The left-hand side matrix of the least-squares system.
-    rhs_vector : :class:`numpy.ndarray` of shape (lhs_num_rows,) of dtype ``numpy.float64``
+    lhs_matrix : :class:`numpy.ndarray` of shape (order, order) of dtype ``numpy.float64``
+        The (regularized) left-hand side matrix of the least-squares system.
+    rhs_vector : :class:`numpy.ndarray` of shape (order,) of dtype ``numpy.float64``
         The right-hand side vector of the least-squares system.
 
     """  # noqa: E501
@@ -327,25 +347,29 @@ def _make_ar_one_step_least_squares_system(
 
         row_index_from = row_index_to
 
+    # finally, the normal equations are formed by first computing the right-hand side
+    # ``b = X.T @ y``
+    rhs_vector = lhs_matrix.T @ rhs_vector
+    # then, the left-hand side is updated for the normal equations to
+    # ``A.T @ A + lambda * I``
+    lhs_matrix = lhs_matrix.T @ lhs_matrix
+    if tikhonov_lambda > 0.0:
+        np.fill_diagonal(lhs_matrix, np.diag(lhs_matrix) + tikhonov_lambda)
+
     return lhs_matrix, rhs_vector
 
 
-@jit(
-    "float64[:](float64[:,:], int64[:], int64, int64, float64)",
-    nopython=True,
-    cache=True,
-)
 def ar_one_step_least_squares(
     xs: NDArray[np.float64],
     x_lens: NDArray[np.int64],
     order: int,
     num_equations: int,
-    rcond: float,
+    tikhonov_lambda: float,
+    lstsq_solver: Literal["sym", "pos"],
 ) -> NDArray[np.float64]:
     """
     Computes the AR coefficients for a one-step-ahead autoregressive model using a
-    an Ordinary Least Squares (OLS) approach based on a (truncated) Singular Value
-    Decomposition (SVD).
+    an Ordinary Least Squares (OLS) approach with optional Tikhonov regularisation.
 
     Parameters
     ----------
@@ -363,9 +387,20 @@ def ar_one_step_least_squares(
         The order of the autoregressive model.
     num_equations : :class:`int`
         The number of equations in the least-squares system.
-    rcond : :class:`float`
-        The cutoff ratio for small singular values. Singular values smaller than
-        ``rcond * max(singular_values)`` are treated as zero.
+    tikhonov_lambda : :class:`float`
+        The Tikhonov regularisation parameter lambda. It has to be non-negative
+        (``lam >= 0.0``) and if ``> 0.0``, it will result in Tikhonov regularisation.
+        Values ``< 0.0`` are silently clipped to ``0.0``.
+        Higher values of lambda lead to a more stable solution but may introduce a bias.
+        A value of ``0.0`` corresponds to the standard OLS approach, but this may lead
+        to numerical instability.
+    lstsq_solver : {``"sym"``, ``"pos"``}
+        The solver to use for the least squares problem, which can be
+
+        - ``"sym"``: Symmetric indefinite factorisation which is a slower but more
+            stable solver.
+        - ``"pos"``: Cholesky factorisation which is the a very fast but less stable
+            solver.
 
     Returns
     -------
@@ -377,29 +412,40 @@ def ar_one_step_least_squares(
         Its ``i``-th element corresponds to the coefficient of the ``i``-th lag
         starting from ``0`` for the zero-lag coefficient.
 
+    Raises
+    -------
+    numpy.linalg.LinAlgError
+        If the least-squares system is singular and cannot be solved with the given
+        ``tikhonov_lambda``.
+
     """  # noqa: E501
 
-    # the left-hand side matrix and right-hand side vector of the least-squares system
-    # are constructed and the linear system is solved using a truncated SVD
+    # the left-hand side matrix ``A`` and right-hand side vector ``b`` of the
+    # least-squares system are constructed
     lhs_matrix, rhs_vector = _make_ar_one_step_least_squares_system(
         xs=xs,
         x_lens=x_lens,
         order=order,
         num_equations=num_equations,
+        tikhonov_lambda=tikhonov_lambda,
     )
 
+    # the AR coefficients are computed by solving the (regularized) least-squares system
     # NOTE: the addition of the zero-lag coefficient, the flip, and the sign flipping is
     #       required due to the conventions for the autoregressive coefficients used by
     #       Matlab's ``arburg`` function
     a_prediction = np.empty(shape=(order + 1), dtype=np.float64)
     a_prediction[0] = 1.0
+
+    # an attempt is made to solve the system directly with the given regularisation
+    # parameter, but this may fail if the system is singular since a dedicated solver
     a_prediction[1:] = np.negative(
         np.flip(
-            np.linalg.lstsq(
+            scipy_solve(
                 a=lhs_matrix,
                 b=rhs_vector,
-                rcond=rcond,
-            )[0]
+                assume_a=lstsq_solver,
+            )
         )
     )
 

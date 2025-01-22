@@ -20,7 +20,7 @@ __all__ = [
 
 # === Imports ===
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -414,11 +414,12 @@ def arburg(
 def ar_ordinary_least_squares(
     xs: Union[ArrayLike, List[ArrayLike], Tuple[ArrayLike, ...]],
     order: Integer = 1,
-    rcond: Optional[RealNumeric] = None,
+    tikhonov_lambda: Optional[RealNumeric] = None,
+    lstsq_solver: Literal["symmetric", "sym", "positive_definite", "pos"] = "symmetric",
 ) -> NDArray[np.float64]:
     """
     Computes the AR coefficients for an autoregressive model using an Ordinary Least
-    Squares (OLS) approach based on a (truncated) Singular Value Decomposition (SVD).
+    Squares (OLS) approach with optional Tikhonov regularisation.
 
     If available at runtime, a Numba-accelerated implementation is used instead of the
     NumPy-based one.
@@ -440,14 +441,21 @@ def ar_ordinary_least_squares(
         The order of the autoregressive model.
         It has to be within the range ``[1, min(len(xs[i]) - 1)]`` for all ``xs[i]``.
         rcond : :class:`float`
-    rcond : :class:`float` or :class:`int` or ``None``, default=``None``
-        The cutoff ratio for small singular values. Singular values smaller than
-        ``rcond * max(singular_values)`` are treated as zero.
-        If provided, it has to be a positive value in the interval ``(0.0, 1.0)``.
-        If ``None``, the NumPy convention for :func:`np.linalg.lstsq` is used, i.e.,
-        ``rcond = num_equations * eps(float64)`` where ``num_equations`` is the number
-        of equations in the resulting linear system and ``eps(float64)`` is the machine
-        epsilon for ``float64``.
+    tikhonov_lambda : :class:`float` or :class:`int` or ``None``, default=``None``
+        The Tikhonov regularisation parameter lambda. It has to be non-negative
+        (``lam >= 0.0``) and if ``> 0.0``, it will result in Tikhonov regularisation.
+        Values ``< 0.0`` are silently clipped to ``0.0``.
+        Higher values of lambda lead to a more stable solution but may introduce a bias.
+        ``None`` is equivalent to ``0.0``.
+        A value of ``0.0`` corresponds to the standard OLS approach, but this may lead
+        to numerical instability.
+    lstsq_solver : {``"sym"``, ``"symmetric"``, ``"pos"``, ``"positive_definite"``}, default=``"symmetric"``
+        The solver to use for the least squares problem, which can be
+
+        - ``"sym"`` or ``"symmetric"``: Symmetric indefinite factorisation which is a
+            slower but more stable solver.
+        - ``"pos"`` or ``"positive_definite"``: Cholesky factorisation which is the
+            a very fast but less stable solver.
 
     Returns
     -------
@@ -462,15 +470,19 @@ def ar_ordinary_least_squares(
     Raises
     ------
     TypeError
-        If ``xs``, ``order``, or ``rcond`` are not of the expected type.
+        If ``xs``, ``order``, or ``tikhonov_lambda`` are not of the expected type.
     ValueError
         If ``xs`` is an empty Array-like.
     ValueError
         If ``xs``is not a real numeric 1D Array-like or iterable of real numeric 1D
         Array-likes with the expected size.
     ValueError
-        If ``order`` or ``rcond`` are not within the allowed range.
-
+        If ``order`` is not within the allowed range.
+    ValueError
+        If ``lstsq_solver`` is not one of the supported solvers.
+    numpy.linalg.LinAlgError
+        If the matrix inversion fails because ``tikhonov_lambda`` is too low to make
+        the design matrix non-singular.
 
     """  # noqa: E501
 
@@ -485,34 +497,52 @@ def ar_ordinary_least_squares(
         max_value=int(np.min(x_lens) - 1),
     )
 
-    # if the ``rcond`` is not provided, the NumPy convention for ``np.linalg.lstsq`` is
-    # used and for this, the number of equations is needed
     # NOTE: the factor of 2 is required because the AR model is fitted in the forward
     #       and backward direction
     num_equations = 2 * (x_lens.sum() - x_lens.size * order)
-    if rcond is None:
-        rcond = num_equations * np.finfo(np.float64).eps
-
-    rcond = get_validated_real_numeric(
-        value=rcond,
-        name="rcond",
-        min_value=0.0,
-        min_inclusive=False,
-        max_value=1.0,
-        max_inclusive=False,
+    tikhonov_lambda = get_validated_real_numeric(
+        value=tikhonov_lambda if tikhonov_lambda is not None else 0.0,
+        name="tikhonov_lambda",
     )
+
+    try:
+        lstsq_solver = {  # type: ignore
+            "sym": "sym",
+            "symmetric": "sym",
+            "pos": "pos",
+            "positive_definite": "pos",
+        }[lstsq_solver.lower()]
+
+    except KeyError:
+        raise ValueError(
+            f"Expected 'lstsq_solver' to be 'sym', 'symmetric', 'pos', or "
+            f"'positive_definite', but got '{lstsq_solver}'."
+        )
 
     # --- Computation ---
 
     # depending on the choice of the user, the Numba-accelerated or the NumPy-based
     # implementation is used
-    return _ar_one_step_least_squares(
-        xs=xs,
-        x_lens=x_lens,
-        order=order,
-        num_equations=num_equations,
-        rcond=rcond,
-    )
+    try:
+        return _ar_one_step_least_squares(
+            xs=xs,
+            x_lens=x_lens,
+            order=order,
+            num_equations=num_equations,
+            tikhonov_lambda=tikhonov_lambda,
+            lstsq_solver=lstsq_solver,  # type: ignore
+        )
+
+    except np.linalg.LinAlgError as error:
+        raise np.linalg.LinAlgError(
+            f"The matrix inversion failed because the design matrix is singular with "
+            f"the given Tikhonov regularisation parameter 'tikhonov_lambda' of "
+            f"{tikhonov_lambda:.5e}.\n"
+            f"Please consider\n"
+            f"- reducing 'order'\n"
+            f"- increasing 'tikhonov_lambda'\n"
+            f"- using a different solver"
+        ) from error
 
 
 def extrapolate_autoregressive(
