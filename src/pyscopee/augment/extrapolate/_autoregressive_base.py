@@ -389,13 +389,15 @@ def ar_one_step_least_squares(
 
 
 @jit(
-    "float64[:](float64[:], float64[:], int64, int64)",
+    "float64[:](float64[:], float64[:, :], int64, int64, int64, int64)",
     nopython=True,
     cache=True,
 )
 def extrapolate_autoregressive(
     x: NDArray[np.float64],
     ar_coeffs: NDArray[np.float64],
+    ar_order_left: int,
+    ar_order_right: int,
     pad_width_left: int,
     pad_width_right: int,
 ) -> NDArray[np.float64]:
@@ -407,10 +409,16 @@ def extrapolate_autoregressive(
     ----------
     x : :class:`numpy.ndarray` of shape (n,)  of dtype ``numpy.float64``
         The real input signal to be extrapolated.
-    ar_coeffs : :class:`numpy.ndarray` of shape (order + 1,) of dtype ``numpy.float64``
+    ar_coeffs : :class:`numpy.ndarray` of shape (2, max(ar_order_left, ar_order_right) + 1)  of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
-        The zero-lag coefficient ``ar_coeffs[0]`` is expected to be present and exactly
-        equal to ``1.0``.
+        Its first row and second row correspond to the AR coefficients for the left and
+        right side, respectively. Please refer to the Notes section for more details.
+        The zero-lag coefficients ``ar_coeffs[::, 0]`` is expected to be present and
+        exactly equal to ``1.0``.
+        Its ``i``-th column has to correspond to the coefficients of the ``i``-th lag.
+    ar_order_left, ar_order_right : :class:`int`
+        The order of the autoregressive model for the left and right side of the input
+        signal, respectively. Please refer to the Notes section for more details.
     pad_width_left, pad_width_right : :class:`int`
         The size of the extrapolation on the left and right side of the input signal,
         respectively. Negative values are silently clipped to ``0``, which means that no
@@ -421,20 +429,31 @@ def extrapolate_autoregressive(
     x_extrapolated : :class:`numpy.ndarray` of shape (n + pad_left + pad_right,)  of dtype ``numpy.float64``
         The extrapolated signal.
 
+    Notes
+    -----
+    The AR coefficients - including the zero-lag coefficient - for the left hand side
+    and the right hand side can be accessed as follows:
+
+
+    ```python
+    ar_coeffs_left = ar_coeffs[0, 0:ar_order_left + 1]
+    ar_coeffs_right = ar_coeffs[1, 0:ar_order_right + 1]
+    ```
+
     """  # noqa: E501
 
     return np.concatenate(
         (
             predict_autoregressive_one_side(
                 x=x,
-                ar_coeffs=ar_coeffs,
+                ar_coeffs=ar_coeffs[0, 0 : ar_order_left + 1],
                 pad_width=pad_width_left,
                 is_left_side=True,
             ),
             x,
             predict_autoregressive_one_side(
                 x=x,
-                ar_coeffs=ar_coeffs,
+                ar_coeffs=ar_coeffs[1, 0 : ar_order_right + 1],
                 pad_width=pad_width_right,
                 is_left_side=False,
             ),

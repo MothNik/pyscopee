@@ -20,7 +20,6 @@ __all__ = [
 # === Imports ===
 
 from typing import List, Optional, Tuple, Union
-from warnings import warn
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -31,6 +30,7 @@ from ..._utils import (
     get_validated_integer,
     get_validated_real_numeric,
     get_validated_real_numeric_1d_array_like,
+    warn_verbose,
 )
 from ._autoregressive_base import arburg_fast as _arburg_fast
 from ._autoregressive_base import (
@@ -62,9 +62,30 @@ def _prepare_x_segments_for_ar_fit(
     xs_packaged : :class:`numpy.ndarray` of shape (len(xs), max(len(xs[i]))) of dtype ``numpy.float64``
         The segments stacked row-wise into a 2D-Array. Its ``i``-th row corresponds to
         ``xs[i]`` with the remaining elements padded to ``max(len(xs[i]))`` with
-        arbitrary values (``numpy.empty`` initialisation).
+        arbitrary values (``numpy.empty`` initialisation). Please refer to the
+        Notes section for more details.
     x_lens : :class:`numpy.ndarray` of shape (len(xs),) of dtype :class:`numpy.int64`
         The lengths of the segments. Its ``i``-th element corresponds to ``len(xs[i])``.
+        Please refer to the Notes section for more details.
+
+    Raises
+    ------
+    TypeError
+        If ``xs`` is not of the expected type.
+    ValueError
+        If ``xs`` is an empty Array-like.
+    ValueError
+        If ``xs`` is not a real numeric 1D Array-like or iterable of real numeric 1D
+        Array-likes with the expected size.
+
+    Notes
+    -----
+    For extracting the ``i``-th segment from ``xs_packaged``, the following code can be
+    used:
+
+    ```python
+    segment_i = xs_packaged[i, 0:x_lens[i]]
+    ```
 
     """  # noqa: E501
 
@@ -103,7 +124,7 @@ def _prepare_x_segments_for_ar_fit(
             f"but got an object of type {x_type_name}."
         )
 
-    xs = tuple(
+    xs = [
         get_validated_real_numeric_1d_array_like(
             value=x,
             name=f"xs-segment {index}",
@@ -112,9 +133,9 @@ def _prepare_x_segments_for_ar_fit(
             output_dtype=np.float64,
         )
         for index, x in enumerate(xs)  # type: ignore
-    )
+    ]
 
-    x_lens = np.array([x.size for x in xs], dtype=np.int64)
+    x_lens = np.array([x.size for x in xs], dtype=np.int64)  # type: ignore
 
     # the segments are stacked row-wise into a (partially empty) 2D-Array
     xs_packaged = np.empty(
@@ -125,6 +146,164 @@ def _prepare_x_segments_for_ar_fit(
         xs_packaged[index, 0:segment_len] = segment
 
     return xs_packaged, x_lens
+
+
+def _prepare_ar_coeffs_for_extrapolation(
+    ar_coeffs: Union[ArrayLike, Tuple[ArrayLike, ArrayLike], List[ArrayLike]],
+    signal_size: int,
+    zero_lag_warn: bool = True,
+) -> Tuple[NDArray[np.float64], int, int]:
+    """
+    Prepares the AR coefficients for the extrapolation by
+
+    - validating them
+    - normalising them if necessary
+    - determining the order(s) of the AR model(s)
+    - stacking them row-wise into a 2D-Array
+
+    Parameters
+    ----------
+    ar_coeffs : Array-like of shape (order + 1,) or 2-tuple or 2-list of Array-likes with shapes (order1 + 1,) and (order2 + 1,)
+        The AR coefficients of the autoregressive model.
+        For details, see the docstring of, e.g., :func:`extrapolate_autoregressive`.
+    signal_size : :class:`int`
+        The size of the signal to be extrapolated.
+    zero_lag_warn : :class:`bool`, default=``True``
+        Whether to issue a warning if the zero-lag coefficient of the AR model is not
+        exactly equal to ``1.0`` (``True``) or not (``False``).
+        Setting this to ``False`` will only disable the warning and not the
+        normalisation.
+
+    Returns
+    -------
+    ar_coeffs_internal : :class:`numpy.ndarray` of shape (2, max(order1, order2) + 1) of dtype ``numpy.float64``
+        The AR coefficients of the autoregressive models stacked row-wise into a
+        2D-Array. The first row corresponds to the left hand side model and the second
+        row to the right hand side model. The remaining elements are padded to
+        ``max(order1, order2) + 1`` with arbitrary values (``numpy.empty``
+        initialisation). Its ``i``-th column corresponds to the ``i``-th lag.
+        Please refer to the Notes section for more details.
+        If the zero-lag coefficient is not exactly 1.0, all coefficients are normalised
+        by this value and a warning is issued (see ``zero_lag_warn``).
+    ar_order_left, ar_order_right : :class:`int`
+        The orders of the autoregressive models for the left and right hand side
+        extrapolation, respectively. Please refer to the Notes section for more details.
+
+    Raises
+    ------
+    TypeError
+        If ``ar_coeffs`` is not of the expected type.
+    ValueError
+        If ``ar_coeffs`` is not of expected size.
+
+    Notes
+    -----
+    For extracting the AR coefficients of the left hand side model from
+    ``ar_coeffs_internal``, the following code can be used:
+
+    ```python
+    ar_coeffs_left = ar_coeffs_internal[0, 0:ar_order_left + 1]
+    ar_coeffs_right = ar_coeffs_internal[1, 0:ar_order_right + 1]
+    ```
+
+    """  # noqa: E501
+
+    # for a single AR model, the same coefficients are used for both sides
+    if not isinstance(ar_coeffs, (list, tuple)):
+        ar_coeffs = (ar_coeffs, ar_coeffs)
+
+    if len(ar_coeffs) != 2:
+        raise ValueError(
+            f"Expected 'ar_coeffs' to be an Array-like or a 2-tuple or 2-list of "
+            f"Array-likes, but got an object of length {len(ar_coeffs)}."
+        )
+
+    ar_coeffs_left, ar_coeffs_right = [
+        get_validated_real_numeric_1d_array_like(
+            value=coeffs,
+            name=f"ar_coeffs[{index}]",
+            min_size=2,
+            max_size=signal_size + 1,
+            output_dtype=np.float64,
+        )
+        for index, coeffs in enumerate(ar_coeffs)
+    ]
+
+    ar_order_left = ar_coeffs_left.size - 1
+    ar_order_right = ar_coeffs_right.size - 1
+    ar_coeffs_internal = np.empty(
+        shape=(2, max(ar_order_left, ar_order_right) + 1),
+        dtype=np.float64,
+    )
+
+    ar_coeffs_internal[0, 0 : ar_order_left + 1] = ar_coeffs_left
+    ar_coeffs_internal[1, 0 : ar_order_right + 1] = ar_coeffs_right
+
+    # if the zero-lag coefficient is not exactly 1.0, a scaling is performed and a
+    # warning is issued if requested
+    for coeffs in ar_coeffs_internal:
+        if coeffs[0] != 1.0:
+            warn_verbose(
+                f"The zero-lag coefficient of the AR model is not exactly 1.0, but "
+                f"{coeffs[0]:.5e}.\n"
+                f"All coefficients are normalised by this value.\n"
+                f"This warning can be suppressed by setting 'zero_lag_warn=False'.",
+                RuntimeWarning,
+                issue_warning=zero_lag_warn,
+            )
+
+            coeffs /= coeffs[0]
+
+    return ar_coeffs_internal, ar_order_left, ar_order_right
+
+
+def _get_validated_pad_width(
+    pad_width: Union[Integer, Tuple[Integer, Integer], List[Integer]],
+) -> Tuple[int, int]:
+    """
+    Validates the padding width for extrapolation.
+
+    Parameters
+    ----------
+    pad_width : :class:`int` or 2-tuple or 2-list of :class:`int`
+        The size of the extrapolation on the left and right side.
+        For details, see the documentation of, e.g., :func:`extrapolate_autoregressive`.
+
+    Returns
+    -------
+    pad_width_left : :class:`int`
+        The size of the extrapolation on the left side.
+    pad_width_right : :class:`int`
+        The size of the extrapolation on the right side.
+
+    Raises
+    ------
+    TypeError
+        If ``pad_width`` is not of the expected type.
+    ValueError
+        If ``pad_width`` is not within the expected range.
+
+    """  # noqa: E501
+
+    if not isinstance(pad_width, (list, tuple)):
+        pad_width = (pad_width, pad_width)
+
+    if len(pad_width) != 2:
+        raise ValueError(
+            f"Expected 'pad_width' to be an integer or a 2-tuple or 2-list of "
+            f"integers, but got an object of length {len(pad_width)}."
+        )
+
+    return tuple(  # type: ignore
+        get_validated_integer(
+            value=value,
+            name=f"pad_width[{index}]",
+            min_value=0,
+            max_value=None,
+            clip=True,
+        )
+        for index, value in enumerate(pad_width)
+    )
 
 
 # === Functions ===
@@ -228,14 +407,13 @@ def arburg(
 
 def extrapolate_autoregressive(
     x: ArrayLike,
-    ar_coeffs: ArrayLike,
-    pad_width: Tuple[Integer, Integer] = (0, 0),
-    jit: bool = True,
+    ar_coeffs: Union[ArrayLike, Tuple[ArrayLike, ArrayLike], List[ArrayLike]],
+    pad_width: Union[Integer, Tuple[Integer, Integer], List[Integer]] = (0, 0),
     zero_lag_warn: bool = True,
 ) -> NDArray[np.float64]:
     """
-    Extrapolates a signal beyond its original range using the coefficients of an
-    autoregressive model.
+    Extrapolates a signal beyond its original range using the coefficients of one or
+    two autoregressive models.
 
     If available at runtime, a Numba-accelerated implementation is used instead of the
     NumPy-based one.
@@ -246,22 +424,33 @@ def extrapolate_autoregressive(
         The real input signal to be extrapolated.
         It is internally promoted to ``numpy.float64``.
         Its length has to be at least ``2``.
-    ar_coeffs : Array-like of shape (order + 1,)
-        The AR coefficients of the autoregressive model.
-        There have to be at least ``2`` (AR(1) model) and at most ``len(x) + 1``
-        coefficients.
-        They are internally promoted to ``numpy.float64``.
-        The zero-lag coefficient ``ar_coeffs[0]`` is expected to be present. In case
-        this coefficient is not exactly equal to ``1.0``, all coefficients are
-        normalised by this value and a warning is issued (see ``zero_lag_warn``).
-    pad_width : (``int``, ``int``), default=``(0, 0)``
-        The size of the extrapolation on the left and right side of the input signal,
-        respectively.
+    ar_coeffs : Array-like of shape (order + 1,) or 2-tuple or 2-list of Array-likes with shapes (order1 + 1,) and (order2 + 1,)
+        The AR coefficients of the autoregressive model(s).
+        If only a single Array-like is provided, these coefficients are applied to both
+        the left hand side and the right hand side extrapolation.
+        For an iterable of two Array-likes, the first one is used for the left hand side
+        and the second one for the right hand side extrapolation. Both models can even
+        have different orders as long as there are at least ``2`` (AR(1) model) and at
+        most ``len(x) + 1`` coefficients.
+        Independent of the order(s), it is expected that the ``i``-th element
+        corresponds to the ``i``-th lag. This implies that the zero-lag coefficient
+        is present at index ``0``.
+        In case the zero-lag coefficient is not exactly equal to ``1.0``, all
+        coefficients of the respective model are normalised by this value and a warning
+        is issued (see ``zero_lag_warn``).
+        The coefficients are internally promoted to ``numpy.float64``.
+    pad_width : :class:`int` or 2-tuple or 2-list of :class:`int`, default=``(0, 0)``
+        The size of the extrapolation on the left and right side.
+        If only a single integer is provided, the same padding is applied to both sides.
+        For an iterable of two integers, the first one is used for the left hand side
+        and the second one for the right hand side extrapolation.
         Negative values are silently clipped to ``0``, which means that no extrapolation
-        is performed on the respective side.
+        is performed on the respective side(s).
     zero_lag_warn : :class:`bool`, default=``True``
         Whether to issue a warning if the zero-lag coefficient of the AR model is not
         exactly equal to ``1.0`` (``True``) or not (``False``).
+        Setting this to ``False`` will only disable the warning and not the
+        normalisation.
 
     Returns
     -------
@@ -273,7 +462,8 @@ def extrapolate_autoregressive(
     TypeError
         If ``x``, ``ar_coeffs``, or ``pad_width`` are not of the expected type.
     ValueError
-        If ``x`` or ``ar_coeffs`` are not 1D Array-like.
+        If ``x`` or ``ar_coeffs`` are not 1D Array-like or an iterable of 1D
+        Array-likes.
     ValueError
         If ``x`` or ``ar_coeffs`` are not of expected size.
 
@@ -288,50 +478,33 @@ def extrapolate_autoregressive(
         max_size=None,
         output_dtype=np.float64,
     )
-    ar_coeffs_internal = get_validated_real_numeric_1d_array_like(
-        value=ar_coeffs,
-        name="ar_coeffs",
-        min_size=2,
-        max_size=x_internal.size + 1,
-        output_dtype=np.float64,
-    )
 
-    pad_width_internal = [
-        get_validated_integer(
-            value=value,
-            name=f"pad_width[{index}]",
-            min_value=0,
-            max_value=None,
-            clip=True,
-        )
-        for index, value in enumerate(pad_width)
-    ]
-
-    # --- Computation ---
+    pad_width = _get_validated_pad_width(pad_width=pad_width)
 
     # if the padding is zero, the extrapolation is equivalent to the original signal
-    if pad_width_internal == [0, 0]:
+    # which allows for an early return to prevent unnecessary validation and computation
+    if pad_width <= (0, 0):
         return x_internal
 
-    # if the zero-lag coefficient is not exactly 1.0, a scaling is performed and a
-    # warning is issued if requested
-    if ar_coeffs_internal[0] != 1.0:
-        if zero_lag_warn:
-            warn(
-                f"The zero-lag coefficient of the AR model is not exactly 1.0, but "
-                f"{ar_coeffs_internal[0]:.5e}.\n"
-                f"All coefficients are normalised by this value.\n"
-                f"This warning can be suppressed by setting 'zero_lag_warn=False'.",
-                RuntimeWarning,
-            )
+    (
+        ar_coeffs_internal,
+        ar_order_left,
+        ar_order_right,
+    ) = _prepare_ar_coeffs_for_extrapolation(
+        ar_coeffs=ar_coeffs,
+        signal_size=x_internal.size,
+        zero_lag_warn=zero_lag_warn,
+    )
 
-        ar_coeffs_internal = ar_coeffs_internal / ar_coeffs_internal[0]
+    # --- Computation ---
 
     # the Numba-accelerated or the NumPy-based implementation is used depending on the
     # user's choice
     return _extrapolate_autoregressive(
         x=x_internal,
         ar_coeffs=ar_coeffs_internal,
-        pad_width_left=pad_width_internal[0],
-        pad_width_right=pad_width_internal[1],
+        ar_order_left=ar_order_left,
+        ar_order_right=ar_order_right,
+        pad_width_left=pad_width[0],
+        pad_width_right=pad_width[1],
     )
