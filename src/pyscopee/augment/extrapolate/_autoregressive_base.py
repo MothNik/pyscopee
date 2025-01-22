@@ -131,6 +131,7 @@ def arburg_fast(
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
         ``1.0``.
+        Its ``i``-th element corresponds to the coefficient of the ``i``-th lag.
 
     References
     ----------
@@ -239,6 +240,152 @@ def arburg_fast(
     a_view[1 + iter_ord] = k_reflection
 
     return a_prediction
+
+
+@jit(
+    "Tuple((float64[:,:], float64[:]))(float64[:,:], int64[:], int64)",
+    nopython=True,
+    cache=True,
+)
+def _make_ar_one_step_least_squares_system(
+    xs: NDArray[np.float64],
+    x_lens: NDArray[np.int64],
+    order: int,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """
+    Constructs the left-hand side ``A`` and right-hand side vector ``b`` of the
+    least-squares ``A @ x ~= b`` system for the one-step-ahead autoregressive model with
+    the coefficients ``x``.
+
+    Here, the right hand side ``b`` is just a column vector because only the next
+    prediction is computed (i.e., the one-step-ahead model).
+
+    Parameters
+    ----------
+    xs : :class:`numpy.ndarray` of shape (m, max(n_i)) of dtype ``numpy.float64``
+        The real input signal segments for which the AR coefficients are to be computed.
+        Multiple segments are processed by stacking them row-wise in a 2D array whose
+        maximum column size is determined by the longest segment. The resulting
+        prediction vector will minimise the forward and backward prediction errors
+        over all segments combined (but not across segments).
+        See ``x_lens`` for the actual Array layout.
+    x_lens : :class:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
+        The lengths of the individual input signal segments.
+        ``x_lens[i]`` gives the number of usable elements in ``xs[i, ::]``.
+    order : :class:`int`
+        The order of the autoregressive model.
+
+    Returns
+    -------
+    lhs_matrix : :class:`numpy.ndarray` of shape (lhs_num_rows, order) of dtype ``numpy.float64``
+        The left-hand side matrix of the least-squares system.
+    rhs_vector : :class:`numpy.ndarray` of shape (lhs_num_rows,) of dtype ``numpy.float64``
+        The right-hand side vector of the least-squares system.
+
+    """  # noqa: E501
+
+    # the left-hand side matrices need to be concatenated by using sliding window views
+    # of the input signal segments
+    # NOTE: the factor 2 is required for the forward and backward prediction errors
+    lhs_num_rows = 2 * (x_lens.sum() - x_lens.size * order)
+    lhs_matrix = np.empty(shape=(lhs_num_rows, order), dtype=np.float64)
+    # the right-hand side matrix is simply the input signal segments with the first
+    # order elements removed
+    rhs_vector = np.empty(shape=(lhs_num_rows,), dtype=np.float64)
+
+    # the left and right hand side are filled by means of a simple loop for the forward
+    # predictions
+    row_index_from = 0
+    for iter_i, num_elements in enumerate(x_lens):
+        row_index_to = row_index_from + num_elements - order
+        lhs_matrix[row_index_from:row_index_to, ::] = (
+            np.lib.stride_tricks.sliding_window_view(
+                xs[iter_i, 0 : num_elements - 1],
+                window_shape=(order,),
+            )
+        )
+
+        rhs_vector[row_index_from:row_index_to] = xs[iter_i, order:num_elements]
+
+        row_index_from = row_index_to
+
+    # now, the process is repeated for the backward predictions
+    for iter_i, num_elements in enumerate(x_lens):
+        row_index_to = row_index_from + num_elements - order
+        lhs_matrix[row_index_from:row_index_to, ::] = (
+            np.lib.stride_tricks.sliding_window_view(
+                np.flip(xs[iter_i, 1:num_elements]),
+                window_shape=(order,),
+            )
+        )
+
+        rhs_vector[row_index_from:row_index_to] = np.flip(
+            xs[iter_i, 0 : num_elements - order]
+        )
+
+        row_index_from = row_index_to
+
+    return lhs_matrix, rhs_vector
+
+
+@jit(
+    "float64[:](float64[:,:], int64[:], int64, float64)",
+    nopython=True,
+    cache=True,
+)
+def ar_one_step_least_squares(
+    xs: NDArray[np.float64],
+    x_lens: NDArray[np.int64],
+    order: int,
+    rcond: float,
+) -> NDArray[np.float64]:
+    """
+    Computes the AR coefficients for a one-step-ahead autoregressive model using a
+    an Ordinary Least Squares (OLS) approach based on a (truncated) singular value
+    decomposition (SVD).
+
+    Parameters
+    ----------
+    xs : :class:`numpy.ndarray` of shape (m, max(n_i)) of dtype ``numpy.float64``
+        The real input signal segments for which the AR coefficients are to be computed.
+        Multiple segments are processed by stacking them row-wise in a 2D array whose
+        maximum column size is determined by the longest segment. The resulting
+        prediction vector will minimise the forward and backward prediction errors
+        over all segments combined (but not across segments).
+        See ``x_lens`` for the actual Array layout.
+    x_lens : :class:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
+        The lengths of the individual input signal segments.
+        ``x_lens[i]`` gives the number of usable elements in ``xs[i, ::]``.
+    order : :class:`int`
+        The order of the autoregressive model.
+    rcond : :class:`float`
+        The cutoff ratio for small singular values. Singular values smaller than
+        ``rcond * max(singular_values)`` are treated as zero.
+
+    Returns
+    -------
+    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
+        The AR coefficients of the autoregressive model.
+        To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
+        included in the output as the first element ``a_prediction[0]`` which is always
+        ``1.0``.
+        Its ``i``-th element corresponds to the coefficient of the ``i``-th lag.
+
+    """  # noqa: E501
+
+    # the left-hand side matrix and right-hand side vector of the least-squares system
+    # are constructed and the linear system is solved using a truncated SVD
+    lhs_matrix, rhs_vector = _make_ar_one_step_least_squares_system(
+        xs=xs,
+        x_lens=x_lens,
+        order=order,
+    )
+
+    return np.linalg.lstsq(
+        a=lhs_matrix,
+        b=rhs_vector,
+        rcond=rcond,
+    )[0]
 
 
 @jit(
