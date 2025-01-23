@@ -12,6 +12,7 @@ __all__ = [
     "get_validated_real_numeric",
     "get_validated_real_numeric_1d_array_like",
     "isinstance_incl_none",
+    "validate_1d_array_is_evenly_spaced",
 ]
 
 # === Imports ===
@@ -534,3 +535,94 @@ def get_validated_real_numeric_1d_array_like(
                 ) from err
 
     return value_array
+
+
+def validate_1d_array_is_evenly_spaced(
+    value: np.ndarray,
+    name: str,
+    atol: float = 1e-8,
+    rtol: float = 1e-5,
+) -> None:
+    """
+    Validates that a 1D Array is evenly spaced in either ascending or descending order.
+
+    Parameters
+    ----------
+    value : :class:`numpy.ndarray` of shape (n, )
+        The 1D Array to validate.
+        It may not be empty.
+        It is promoted to ``numpy.float64`` for the comparison.
+    name : :class:`str`
+        The name of the value used for error messages.
+    atol, rtol : :class:`float`, default=``1e-8`` and ``1e-5``
+        The absolute and relative tolerances for the spacing checks that will be
+        passed to :func:`numpy.allclose` as ``np.allclose(value, reference, atol=atol, rtol=rtol)``.
+        ``reference`` is created by :func:`numpy.linspace` as
+        ``np.linspace(value[0], value[-1], num=value.size)``.
+
+    Raises
+    ------
+    TypeError
+        If ``value`` is not a 1D NumPy Array.
+    TypeError
+        If the entries of ``value`` cannot be promoted to ``numpy.float64``.
+    ValueError
+        If ``value`` is empty.
+    ValueError
+        If ``value`` is not evenly spaced in either ascending or descending order.
+
+    """  # noqa: E501
+
+    # first, the value is checked to be a 1D Array
+    if not isinstance(value, np.ndarray):
+        raise TypeError(
+            f"Expected '{name}' to be a NumPy Array, but got {type(value)}."
+        )
+
+    if value.ndim != 1:
+        raise ValueError(
+            f"Expected '{name}' to be a 1D Array, but got a {value.ndim}D Array."
+        )
+
+    # empty Arrays are considered invalid
+    if value.size < 1:
+        raise ValueError(f"Expected '{name}' to be a non-empty Array.")
+
+    # then, the value is checked to be evenly spaced in either ascending or descending
+    # order
+    # this is done by creating a reference ``linspace`` and checking if the values are
+    # numerically close to it
+    # NOTE: to ensure numerical stability, the values are promoted to ``numpy.float64``
+    #       if they are not already
+    if value.dtype != np.float64:
+        try:
+            value = value.astype(np.float64)
+        except Exception as error:
+            raise TypeError(
+                f"Could not convert '{name}' to a NumPy Array of dtype 'float64' for "
+                f"checking if it is evenly spaced."
+            ) from error
+
+    # NOTE: this naturally handles ascending and descending order simultaneously
+    reference = np.linspace(
+        start=value[0],
+        stop=value[-1],
+        num=value.size,
+        dtype=np.float64,
+    )
+
+    # if the values are numerically close to evenly spaced values, everything is fine
+    if np.allclose(
+        value,
+        reference,
+        atol=atol,
+        rtol=rtol,
+    ):
+        return
+
+    # otherwise, if the values are not numerically close to evenly spaced values, an
+    # error is raised
+    raise ValueError(
+        f"Expected '{name}' to be evenly spaced in either ascending or descending "
+        f"order, but got an Array with uneven spacing."
+    )

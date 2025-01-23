@@ -15,5 +15,6 @@ Currently, the following methods are implemented:
 from ._extrapolate import (  # noqa: F401
     ar_ordinary_least_squares,
     arburg,
+    extend_grid_points,
     extrapolate_autoregressive,
 )

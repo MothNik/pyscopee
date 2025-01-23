@@ -16,6 +16,7 @@ Currently, the following extrapolation methods are available:
 __all__ = [
     "arburg",
     "ar_ordinary_least_squares",
+    "extend_grid_points",
     "extrapolate_autoregressive",
 ]
 
@@ -32,6 +33,7 @@ from ..._utils import (
     get_validated_integer,
     get_validated_real_numeric,
     get_validated_real_numeric_1d_array_like,
+    validate_1d_array_is_evenly_spaced,
     warn_verbose,
 )
 from ._autoregressive_base import (
@@ -544,6 +546,132 @@ def ar_ordinary_least_squares(
             f"- increasing 'tikhonov_lambda'\n"
             f"- using a different solver"
         ) from error
+
+
+def extend_grid_points(
+    grid_points: ArrayLike,
+    pad_width: Union[Integer, Tuple[Integer, Integer], List[Integer]],
+    spacing_check_atol: RealNumeric = 1e-8,
+    spacing_check_rtol: RealNumeric = 1e-5,
+) -> NDArray[np.float64]:
+    """
+    Extends the evenly spaced grid points at which a signal was sampled by a given
+    padding width to make them match with an extrapolated signal padded by these widths.
+
+    It is complementary to extrapolation functions which only extrapolate the signal
+    values but not the grid points.
+
+    Parameters
+    ----------
+    grid_points : Array-like of shape (n,)
+        The evenly spaced grid points at which the signal was sampled sorted in either
+        ascending or descending order.
+        It is internally promoted to ``numpy.float64``.
+        Its length has to be at least ``2``.
+    pad_width : :class:`int` or 2-tuple or 2-list of :class:`int`
+        The size of the extrapolation on the left and right side.
+        If only a single integer is provided, the same padding is applied to both sides.
+        For an iterable of two integers, the first one is used for the left hand side
+        and the second one for the right hand side extrapolation.
+        Negative values are silently clipped to ``0``, which means that no extrapolation
+        is performed on the respective side(s).
+    spacing_check_atol, spacing_check_rtol : :class:`float`, default=``1e-8`` and ``1e-5``
+        The absolute and relative tolerances for checking the even spacing that will be
+        passed to :func:`numpy.allclose` as ``np.allclose(grid_points, reference, atol=atol, rtol=rtol)``.
+        ``reference`` is created by :func:`numpy.linspace` as
+        ``np.linspace(grid_points[0], grid_points[-1], num=grid_points.size)``.
+        Both values have to be non-negative (``>= 0.0``).
+
+    Returns
+    -------
+    grid_points_extended : :class:`numpy.ndarray` of shape (n + pad_left + pad_right,) of dtype ``numpy.float64``
+        The extended grid points.
+
+    Raises
+    ------
+    TypeError
+        If ``grid_points``, ``pad_width``, ``spacing_check_atol``, or
+        ``spacing_check_rtol`` are not of the expected type.
+    ValueError
+        If ``grid_points`` is not a real numeric 1D Array-like.
+    ValueError
+        If ``grid_points`` is not of expected size.
+    ValueError
+        If ``spacing_check_atol`` or ``spacing_check_rtol`` are negative (``< 0.0``).
+
+    """  # noqa: E501
+
+    # --- Input Validation ---
+
+    grid_points = get_validated_real_numeric_1d_array_like(
+        value=grid_points,
+        name="grid_points",
+        min_size=2,
+        max_size=None,
+        output_dtype=np.float64,
+    )
+
+    # the even spacing is checked after the check parameters were validated
+    spacing_check_atol = get_validated_real_numeric(
+        value=spacing_check_atol,
+        name="spacing_check_atol",
+        min_value=0.0,
+    )
+    spacing_check_rtol = get_validated_real_numeric(
+        value=spacing_check_rtol,
+        name="spacing_check_rtol",
+        min_value=0.0,
+    )
+    validate_1d_array_is_evenly_spaced(
+        value=grid_points,
+        name="grid_points",
+        atol=spacing_check_atol,
+        rtol=spacing_check_rtol,
+    )
+
+    pad_width = _get_validated_pad_width(pad_width=pad_width)
+
+    # if the padding is zero, the extrapolation is equivalent to the original signal
+    # which allows for an early return to prevent unnecessary validation and computation
+    if pad_width <= (0, 0):
+        return grid_points
+
+    # --- Computation ---
+
+    # the grid points are extended by the padding width starting by computing the
+    # extension for the left side (if required)
+    spacing = (grid_points[-1] - grid_points[0]) / (grid_points.size - 1)
+    if pad_width[0] > 0:
+        left_extension = grid_points[0] + spacing * np.arange(
+            start=-pad_width[0],
+            stop=0,
+            step=1,
+            dtype=np.int64,
+        )
+
+    else:
+        left_extension = np.empty(shape=(0,), dtype=np.float64)
+
+    # then, the extension for the right side is computed (if required)
+    if pad_width[1] > 0:
+        right_extension = grid_points[-1] + spacing * np.arange(
+            start=1,
+            stop=pad_width[1] + 1,
+            step=1,
+            dtype=np.int64,
+        )
+
+    else:
+        right_extension = np.empty(shape=(0,), dtype=np.float64)
+
+    # finally, the grid points can be extended by the left and right extensions
+    return np.concatenate(
+        (
+            left_extension,
+            grid_points,
+            right_extension,
+        )
+    )
 
 
 def extrapolate_autoregressive(

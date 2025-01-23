@@ -15,6 +15,7 @@ from ._validate import (  # noqa: F401
     get_validated_real_numeric,
     get_validated_real_numeric_1d_array_like,
     isinstance_incl_none,
+    validate_1d_array_is_evenly_spaced,
 )
 from ._visuals import (  # noqa: F401
     apply_pyscopee_plot_style,
