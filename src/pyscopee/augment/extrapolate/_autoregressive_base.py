@@ -5,6 +5,8 @@ This module implements functions for extrapolating signals beyond their original
 using autoregressive models, such as
 
 - the (segmented, Tikhonov-regularised) Burg method for AR coefficient estimation
+- the (segmented, Tikhonov-regularised) Ordinary Least Squares (OLS
+    coefficient estimation
 
 """
 

@@ -6,6 +6,7 @@ This module provides functions for extrapolating signals beyond their original r
 Currently, the following methods are implemented:
 
 - Burg's method for autoregressive model estimation
+- Ordinary least squares (OLS) for autoregressive model estimation
 
 """
 

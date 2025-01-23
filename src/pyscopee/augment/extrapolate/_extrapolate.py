@@ -7,6 +7,7 @@ range that include input validation and implementation selection.
 Currently, the following extrapolation methods are available:
 
 - Burg's method for autoregressive model estimation
+- Ordinary Least Squares (OLS) for autoregressive model estimation
 
 """
 
