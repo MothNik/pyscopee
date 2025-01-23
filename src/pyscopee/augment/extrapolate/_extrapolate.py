@@ -333,7 +333,7 @@ def arburg(
     ----------
     xs : Array-like of shape (n,) or (m, n) or list or tuple of (n_i,)-Array-likes
         The real input signal (segments) for which the AR coefficients are to be
-        computed.
+        computed. It is assumed that the signal is sampled at evenly spaced grid points.
         2D-ArrayLikes are interpreted as row-wise stacked segments.
         If multiple segments are provided, they are treated as individual segments of
         a single signal and the resulting AR model will minimise the forward and
@@ -431,7 +431,7 @@ def ar_ordinary_least_squares(
     ----------
     xs : Array-like of shape (n,) or (m, n) or list or tuple of (n_i,)-Array-likes
         The real input signal (segments) for which the AR coefficients are to be
-        computed.
+        computed. It is assumed that the signal is sampled at evenly spaced grid points.
         2D-ArrayLikes are interpreted as row-wise stacked segments.
         If multiple segments are provided, they are treated as individual segments of
         a single signal and the resulting AR model will minimise the forward and
@@ -687,10 +687,13 @@ def extrapolate_autoregressive(
     If available at runtime, a Numba-accelerated implementation is used instead of the
     NumPy-based one.
 
+    For getting the grid points corresponding to the extrapolated signal, the function
+    :func:`extend_grid_points` can be used.
+
     Parameters
     ----------
     x : Array-like of shape (n,)
-        The real input signal to be extrapolated.
+        The real input signal to be extrapolated sampled at evenly spaced grid points.
         It is internally promoted to ``numpy.float64``.
         Its length has to be at least ``2``.
     ar_coeffs : Array-like of shape (order + 1,) or 2-tuple or 2-list of Array-likes with shapes (order1 + 1,) and (order2 + 1,)
