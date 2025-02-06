@@ -79,8 +79,9 @@ def predict_autoregressive_one_side(
 
     # ... and the prediction is performed recursively
     for iter_i in range(0, pad_width):
-        x_predicted[order + iter_i] = np.sum(
-            ar_coeffs_internal * x_predicted[iter_i : order + iter_i]
+        x_predicted[order + iter_i] = np.dot(
+            ar_coeffs_internal,
+            x_predicted[iter_i : order + iter_i],
         )
 
     # for the left side, the output Array has to be flipped
