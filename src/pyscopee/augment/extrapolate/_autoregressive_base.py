@@ -198,14 +198,20 @@ def arburg_fast(
     iter_ord = 0
     for iter_ord in range(0, order - 1):
         # the new reflection coefficient is computed
-        k_reflection = -np.sum(a_view * np.flip(g_view)[0 : 1 + iter_ord]) / np.sum(
-            a_view * g_view[0 : 1 + iter_ord]
+        k_reflection = -np.dot(
+            a_view,
+            np.ascontiguousarray(
+                g_view[g_view.size - 1 : g_view.size - iter_ord - 2 : -1]
+            ),
+        ) / np.dot(
+            a_view,
+            g_view[0 : 1 + iter_ord],
         )
 
         # then, the Levinson-Durbin recursion is applied to update the prediction
         # coefficients
         a_view = a_prediction[0 : 2 + iter_ord]
-        a_view[1 : 1 + iter_ord] += k_reflection * np.flip(a_view[1 : 1 + iter_ord])
+        a_view[1 : 1 + iter_ord] += k_reflection * a_view[iter_ord:0:-1]
         a_view[1 + iter_ord] = k_reflection
 
         # after that, the auxiliary vectors r and the auxiliary products ΔR @ a
@@ -217,21 +223,24 @@ def arburg_fast(
         for iter_i, num_elements in enumerate(x_lens):
             # the vectors r are updated
             x = xs[iter_i, 0:num_elements]
-            r_view[::, iter_i] -= (x[0 : 1 + iter_ord] * x[1 + iter_ord]) + np.flip(
-                x[num_elements - 1 - iter_ord : :]
-            ) * x[num_elements - 2 - iter_ord]
+            r_view[::, iter_i] -= (x[0 : 1 + iter_ord] * x[1 + iter_ord]) + x[
+                num_elements - 1 : num_elements - iter_ord - 2 : -1
+            ] * x[num_elements - 2 - iter_ord]
 
             # the products ΔR @ a are computed
             # ΔR is a rank-1 matrix, but it is more efficient to compute the individual
             # vector-vector products with the vector a directly
-            x_view = np.flip(x[0 : 2 + iter_ord])
-            delta_r_dot_a = -x_view * np.sum(x_view * a_view)
-            x_view = x[num_elements - 2 - iter_ord : :]
-            delta_r_dot_a -= x_view * np.sum(x_view * a_view)
+            x_view = np.ascontiguousarray(x[1 + iter_ord :: -1])
+            delta_r_dot_a = -x_view * np.dot(x_view, a_view)
+            x_view = np.ascontiguousarray(x[num_elements - 2 - iter_ord : :])
+            delta_r_dot_a -= x_view * np.dot(x_view, a_view)
 
             # the auxiliary vector g is updated
             g_view += delta_r_dot_a
-            g_auxiliary[2 + iter_ord] += np.sum(r_view_new[::, iter_i] * a_view)
+            g_auxiliary[2 + iter_ord] += np.dot(
+                np.ascontiguousarray(r_view_new[::, iter_i]),
+                a_view,
+            )
 
         # the views of the auxiliary vectors are updated
         r_view = r_view_new
@@ -239,11 +248,15 @@ def arburg_fast(
 
     # the last update of the reflection and prediction coefficients is performed
     iter_ord += 1
-    k_reflection = -np.sum(a_view * np.flip(g_view)[0 : 1 + iter_ord]) / np.sum(
-        a_view * g_view[0 : 1 + iter_ord]
+    k_reflection = -np.dot(
+        a_view,
+        np.ascontiguousarray(g_view[g_view.size - 1 : g_view.size - iter_ord - 2 : -1]),
+    ) / np.dot(
+        a_view,
+        g_view[0 : 1 + iter_ord],
     )
     a_view = a_prediction[0 : 2 + iter_ord]
-    a_view[1 : 1 + iter_ord] += k_reflection * np.flip(a_view[1 : 1 + iter_ord])
+    a_view[1 : 1 + iter_ord] += k_reflection * a_view[iter_ord:0:-1]
     a_view[1 + iter_ord] = k_reflection
 
     return a_prediction
