@@ -66,12 +66,12 @@ def _prepare_x_segments_for_ar_fit(
 
     Returns
     -------
-    xs_packaged : :class:`numpy.ndarray` of shape (len(xs), max(len(xs[i]))) of dtype ``numpy.float64``
+    xs_packaged : :obj:`numpy.ndarray` of shape (len(xs), max(len(xs[i]))) of dtype ``numpy.float64``
         The segments stacked row-wise into a 2D-Array. Its ``i``-th row corresponds to
         ``xs[i]`` with the remaining elements padded to ``max(len(xs[i]))`` with
         arbitrary values (``numpy.empty`` initialisation). Please refer to the
         Notes section for more details.
-    x_lens : :class:`numpy.ndarray` of shape (len(xs),) of dtype :class:`numpy.int64`
+    x_lens : :obj:`numpy.ndarray` of shape (len(xs),) of dtype ``numpy.int64``
         The lengths of the segments. Its ``i``-th element corresponds to ``len(xs[i])``.
         Please refer to the Notes section for more details.
 
@@ -173,9 +173,9 @@ def _prepare_ar_coeffs_for_extrapolation(
     ar_coeffs : Array-like of shape (order + 1,) or 2-tuple or 2-list of Array-likes with shapes (order1 + 1,) and (order2 + 1,)
         The AR coefficients of the autoregressive model.
         For details, see the docstring of, e.g., :func:`extrapolate_autoregressive`.
-    signal_size : :class:`int`
+    signal_size : :obj:`int`
         The size of the signal to be extrapolated.
-    zero_lag_warn : :class:`bool`, default=``True``
+    zero_lag_warn : :obj:`bool`, default=``True``
         Whether to issue a warning if the zero-lag coefficient of the AR model is not
         exactly equal to ``1.0`` (``True``) or not (``False``).
         Setting this to ``False`` will only disable the warning and not the
@@ -183,7 +183,7 @@ def _prepare_ar_coeffs_for_extrapolation(
 
     Returns
     -------
-    ar_coeffs_internal : :class:`numpy.ndarray` of shape (2, max(order1, order2) + 1) of dtype ``numpy.float64``
+    ar_coeffs_internal : :obj:`numpy.ndarray` of shape (2, max(order1, order2) + 1) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive models stacked row-wise into a
         2D-Array. The first row corresponds to the left hand side model and the second
         row to the right hand side model. The remaining elements are padded to
@@ -192,7 +192,7 @@ def _prepare_ar_coeffs_for_extrapolation(
         Please refer to the Notes section for more details.
         If the zero-lag coefficient is not exactly 1.0, all coefficients are normalised
         by this value and a warning is issued (see ``zero_lag_warn``).
-    ar_order_left, ar_order_right : :class:`int`
+    ar_order_left, ar_order_right : :obj:`int`
         The orders of the autoregressive models for the left and right hand side
         extrapolation, respectively. Please refer to the Notes section for more details.
 
@@ -272,15 +272,15 @@ def _get_validated_pad_width(
 
     Parameters
     ----------
-    pad_width : :class:`int` or 2-tuple or 2-list of :class:`int`
+    pad_width : :obj:`int` or 2-tuple or 2-list of :obj:`int`
         The size of the extrapolation on the left and right side.
         For details, see the documentation of, e.g., :func:`extrapolate_autoregressive`.
 
     Returns
     -------
-    pad_width_left : :class:`int`
+    pad_width_left : :obj:`int`
         The size of the extrapolation on the left side.
-    pad_width_right : :class:`int`
+    pad_width_right : :obj:`int`
         The size of the extrapolation on the right side.
 
     Raises
@@ -342,10 +342,10 @@ def arburg(
         or backward prediction is performed across the segments.
         Its/their data type is internally promoted to ``numpy.float64``.
         Each of them must hold at least ``2`` elements.
-    order : :class:`int`, default=``1``
+    order : :obj:`int`, default=``1``
         The order of the autoregressive model.
         It has to be within the range ``[1, min(len(xs[i]) - 1)]`` for all ``xs[i]``.
-    tikhonov_lambda : :class:`float` or :class:`int` or ``None``, default=``None``
+    tikhonov_lambda : :obj:`float` or :obj:`int` or ``None``, default=``None``
         The Tikhonov regularisation parameter lambda. It has to be non-negative
         (``lam >= 0.0``) and if ``> 0.0``, it will result in Tikhonov regularisation.
         Values ``< 0.0`` are silently clipped to ``0.0``.
@@ -354,7 +354,7 @@ def arburg(
 
     Returns
     -------
-    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
+    a_prediction : :obj:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
@@ -440,11 +440,11 @@ def ar_ordinary_least_squares(
         or backward prediction is performed across the segments.
         Its/their data type is internally promoted to ``numpy.float64``.
         Each of them must hold at least ``2`` elements.
-    order : :class:`int`, default=``1``
+    order : :obj:`int`, default=``1``
         The order of the autoregressive model.
         It has to be within the range ``[1, min(len(xs[i]) - 1)]`` for all ``xs[i]``.
-        rcond : :class:`float`
-    tikhonov_lambda : :class:`float` or :class:`int` or ``None``, default=``None``
+        rcond : :obj:`float`
+    tikhonov_lambda : :obj:`float` or :obj:`int` or ``None``, default=``None``
         The Tikhonov regularisation parameter lambda. It has to be non-negative
         (``lam >= 0.0``) and if ``> 0.0``, it will result in Tikhonov regularisation.
         Values ``< 0.0`` are silently clipped to ``0.0``.
@@ -462,7 +462,7 @@ def ar_ordinary_least_squares(
 
     Returns
     -------
-    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
+    a_prediction : :obj:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
@@ -568,14 +568,14 @@ def extend_grid_points(
         ascending or descending order.
         It is internally promoted to ``numpy.float64``.
         Its length has to be at least ``2``.
-    pad_width : :class:`int` or 2-tuple or 2-list of :class:`int`
+    pad_width : :obj:`int` or 2-tuple or 2-list of :obj:`int`
         The size of the extrapolation on the left and right side.
         If only a single integer is provided, the same padding is applied to both sides.
         For an iterable of two integers, the first one is used for the left hand side
         and the second one for the right hand side extrapolation.
         Negative values are silently clipped to ``0``, which means that no extrapolation
         is performed on the respective side(s).
-    spacing_check_atol, spacing_check_rtol : :class:`float`, default=``1e-8`` and ``1e-5``
+    spacing_check_atol, spacing_check_rtol : :obj:`float`, default=``1e-8`` and ``1e-5``
         The absolute and relative tolerances for checking the even spacing that will be
         passed to :func:`numpy.allclose` as ``np.allclose(grid_points, reference, atol=atol, rtol=rtol)``.
         ``reference`` is created by :func:`numpy.linspace` as
@@ -584,7 +584,7 @@ def extend_grid_points(
 
     Returns
     -------
-    grid_points_extended : :class:`numpy.ndarray` of shape (n + pad_left + pad_right,) of dtype ``numpy.float64``
+    grid_points_extended : :obj:`numpy.ndarray` of shape (n + pad_left + pad_right,) of dtype ``numpy.float64``
         The extended grid points.
 
     Raises
@@ -711,14 +711,14 @@ def extrapolate_autoregressive(
         coefficients of the respective model are normalised by this value and a warning
         is issued (see ``zero_lag_warn``).
         The coefficients are internally promoted to ``numpy.float64``.
-    pad_width : :class:`int` or 2-tuple or 2-list of :class:`int`, default=``(0, 0)``
+    pad_width : :obj:`int` or 2-tuple or 2-list of :obj:`int`, default=``(0, 0)``
         The size of the extrapolation on the left and right side.
         If only a single integer is provided, the same padding is applied to both sides.
         For an iterable of two integers, the first one is used for the left hand side
         and the second one for the right hand side extrapolation.
         Negative values are silently clipped to ``0``, which means that no extrapolation
         is performed on the respective side(s).
-    zero_lag_warn : :class:`bool`, default=``True``
+    zero_lag_warn : :obj:`bool`, default=``True``
         Whether to issue a warning if the zero-lag coefficient of the AR model is not
         exactly equal to ``1.0`` (``True``) or not (``False``).
         Setting this to ``False`` will only disable the warning and not the
@@ -726,7 +726,7 @@ def extrapolate_autoregressive(
 
     Returns
     -------
-    x_extrapolated : :class:`numpy.ndarray` of shape (n + pad_left + pad_right,) of dtype ``numpy.float64``
+    x_extrapolated : :obj:`numpy.ndarray` of shape (n + pad_left + pad_right,) of dtype ``numpy.float64``
         The extrapolated signal.
 
     Raises

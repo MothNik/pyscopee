@@ -40,16 +40,16 @@ def predict_autoregressive_one_side(
 
     Parameters
     ----------
-    x : :class:`numpy.ndarray` of shape (n,)  of dtype ``numpy.float64``
+    x : :obj:`numpy.ndarray` of shape (n,) of dtype ``numpy.float64``
         The real input signal for which the extrapolation is to be performed.
-    ar_coeffs : :class:`numpy.ndarray` of shape (order + 1,)  of dtype ``numpy.float64``
+    ar_coeffs : :obj:`numpy.ndarray` of shape (order + 1,) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         The zero-lag coefficient ``ar_coeffs[0]`` is expected to be present and exactly
         equal to ``1.0``.
-    pad_width : :class:`int`
+    pad_width : :obj:`int`
         The size of the extrapolation on the side of the input signal.
         Negative values are silently clipped to ``0``.
-    is_left_side : :class:`bool`
+    is_left_side : :obj:`bool`
         Whether the prediction is for the left side (``True``) or the right side
         of the input signal (``False``) . This distinction is necessary because the
         prediction is performed recursively and the left side requires some additional
@@ -57,7 +57,7 @@ def predict_autoregressive_one_side(
 
     Returns
     -------
-    x_predicted : :class:`numpy.ndarray` of shape (pad_width,)  of dtype ``numpy.float64``
+    x_predicted : :obj:`numpy.ndarray` of shape (pad_width,) of dtype ``numpy.float64``
         The predicted signal values.
 
     """  # noqa: E501
@@ -112,19 +112,19 @@ def arburg_fast(
 
     Parameters
     ----------
-    xs : :class:`numpy.ndarray` of shape (m, max(n_i)) of dtype ``numpy.float64``
+    xs : :obj:`numpy.ndarray` of shape (m, max(n_i)) of dtype ``numpy.float64``
         The real input signal segments for which the AR coefficients are to be computed.
         Multiple segments are processed by stacking them row-wise in a 2D array whose
         maximum column size is determined by the longest segment. The resulting
         prediction vector will minimise the forward and backward prediction errors
         over all segments combined (but not across segments).
         See ``x_lens`` for the actual Array layout.
-    x_lens : :class:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
+    x_lens : :obj:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
         The lengths of the individual input signal segments.
         ``x_lens[i]`` gives the number of usable elements in ``xs[i, ::]``.
-    order : :class:`int`
+    order : :obj:`int`
         The order of the autoregressive model.
-    tikhonov_lambda : :class:`float`
+    tikhonov_lambda : :obj:`float`
         The Tikhonov regularisation parameter lambda. It has to be non-negative
         (``lam >= 0.0``) and if ``> 0.0``, it will result in Tikhonov regularisation.
         Values ``< 0.0`` are silently clipped to ``0.0``.
@@ -132,7 +132,7 @@ def arburg_fast(
 
     Returns
     -------
-    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
+    a_prediction : :obj:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
@@ -295,21 +295,21 @@ def _make_ar_one_step_least_squares_system(
 
     Parameters
     ----------
-    xs : :class:`numpy.ndarray` of shape (m, max(n_i)) of dtype ``numpy.float64``
+    xs : :obj:`numpy.ndarray` of shape (m, max(n_i)) of dtype ``numpy.float64``
         The real input signal segments for which the AR coefficients are to be computed.
         Multiple segments are processed by stacking them row-wise in a 2D array whose
         maximum column size is determined by the longest segment. The resulting
         prediction vector will minimise the forward and backward prediction errors
         over all segments combined (but not across segments).
         See ``x_lens`` for the actual Array layout.
-    x_lens : :class:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
+    x_lens : :obj:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
         The lengths of the individual input signal segments.
         ``x_lens[i]`` gives the number of usable elements in ``xs[i, ::]``.
-    order : :class:`int`
+    order : :obj:`int`
         The order of the autoregressive model.
-    num_equations : :class:`int`
+    num_equations : :obj:`int`
         The number of equations in the least-squares system.
-    tikhonov_lambda : :class:`float`
+    tikhonov_lambda : :obj:`float`
         The Tikhonov regularisation parameter lambda. It has to be non-negative
         (``lam >= 0.0``) and if ``> 0.0``, it will result in Tikhonov regularisation.
         Values ``< 0.0`` are silently clipped to ``0.0``.
@@ -317,9 +317,9 @@ def _make_ar_one_step_least_squares_system(
 
     Returns
     -------
-    lhs_matrix : :class:`numpy.ndarray` of shape (order, order) of dtype ``numpy.float64``
+    lhs_matrix : :obj:`numpy.ndarray` of shape (order, order) of dtype ``numpy.float64``
         The (regularized) left-hand side matrix of the least-squares system.
-    rhs_vector : :class:`numpy.ndarray` of shape (order,) of dtype ``numpy.float64``
+    rhs_vector : :obj:`numpy.ndarray` of shape (order,) of dtype ``numpy.float64``
         The right-hand side vector of the least-squares system.
 
     """  # noqa: E501
@@ -389,21 +389,21 @@ def ar_one_step_least_squares(
 
     Parameters
     ----------
-    xs : :class:`numpy.ndarray` of shape (m, max(n_i)) of dtype ``numpy.float64``
+    xs : :obj:`numpy.ndarray` of shape (m, max(n_i)) of dtype ``numpy.float64``
         The real input signal segments for which the AR coefficients are to be computed.
         Multiple segments are processed by stacking them row-wise in a 2D array whose
         maximum column size is determined by the longest segment. The resulting
         prediction vector will minimise the forward and backward prediction errors
         over all segments combined (but not across segments).
         See ``x_lens`` for the actual Array layout.
-    x_lens : :class:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
+    x_lens : :obj:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
         The lengths of the individual input signal segments.
         ``x_lens[i]`` gives the number of usable elements in ``xs[i, ::]``.
-    order : :class:`int`
+    order : :obj:`int`
         The order of the autoregressive model.
-    num_equations : :class:`int`
+    num_equations : :obj:`int`
         The number of equations in the least-squares system.
-    tikhonov_lambda : :class:`float`
+    tikhonov_lambda : :obj:`float`
         The Tikhonov regularisation parameter lambda. It has to be non-negative
         (``lam >= 0.0``) and if ``> 0.0``, it will result in Tikhonov regularisation.
         Values ``< 0.0`` are silently clipped to ``0.0``.
@@ -420,7 +420,7 @@ def ar_one_step_least_squares(
 
     Returns
     -------
-    a_prediction : :class:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
+    a_prediction : :obj:`numpy.ndarray` of shape (order  + 1,) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         To be consistent with Matlab's ``arburg`` function, the zero-lag coefficient is
         included in the output as the first element ``a_prediction[0]`` which is always
@@ -487,26 +487,26 @@ def extrapolate_autoregressive(
 
     Parameters
     ----------
-    x : :class:`numpy.ndarray` of shape (n,)  of dtype ``numpy.float64``
+    x : :obj:`numpy.ndarray` of shape (n,) of dtype ``numpy.float64``
         The real input signal to be extrapolated.
-    ar_coeffs : :class:`numpy.ndarray` of shape (2, max(ar_order_left, ar_order_right) + 1)  of dtype ``numpy.float64``
+    ar_coeffs : :obj:`numpy.ndarray` of shape (2, max(ar_order_left, ar_order_right) + 1) of dtype ``numpy.float64``
         The AR coefficients of the autoregressive model.
         Its first row and second row correspond to the AR coefficients for the left and
         right side, respectively. Please refer to the Notes section for more details.
         The zero-lag coefficients ``ar_coeffs[::, 0]`` is expected to be present and
         exactly equal to ``1.0``.
         Its ``i``-th column has to correspond to the coefficients of the ``i``-th lag.
-    ar_order_left, ar_order_right : :class:`int`
+    ar_order_left, ar_order_right : :obj:`int`
         The order of the autoregressive model for the left and right side of the input
         signal, respectively. Please refer to the Notes section for more details.
-    pad_width_left, pad_width_right : :class:`int`
+    pad_width_left, pad_width_right : :obj:`int`
         The size of the extrapolation on the left and right side of the input signal,
         respectively. Negative values are silently clipped to ``0``, which means that no
         extrapolation is performed on the respective side.
 
     Returns
     -------
-    x_extrapolated : :class:`numpy.ndarray` of shape (n + pad_left + pad_right,)  of dtype ``numpy.float64``
+    x_extrapolated : :obj:`numpy.ndarray` of shape (n + pad_left + pad_right,) of dtype ``numpy.float64``
         The extrapolated signal.
 
     Notes

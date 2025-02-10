@@ -83,16 +83,16 @@ else:
 
         Parameters
         ----------
-        func : :class:`Callable`
+        func : callable
             The function that is decorated.
-        args : :class:`tuple`
+        args : :obj:`tuple`
             The fake positional arguments.
-        kwargs : :class:`dict`
+        kwargs : :obj:`dict`
             The fake keyword arguments.
 
         Returns
         -------
-        decorated_func : :class:`Callable`
+        decorated_func : callable
             The decorated function.
 
         """

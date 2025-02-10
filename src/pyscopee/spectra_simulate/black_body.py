@@ -48,11 +48,11 @@ def black_body_spectrum(
 
     Parameters
     ----------
-    wavenumbers : class:`int` or :class:`float` or :class:`numpy.ndarray` of shape (n,)
+    wavenumbers : :obj:`int` or :obj:`float` or :obj:`numpy.ndarray` of shape (n,)
         The wavenumber(s) in 1 / cm.
         Negative wavenumbers are allowed and will be converted to their absolute values
         to make the spectrum evenly symmetric around zero.
-    temperature : class:`int` or :class:`float`
+    temperature : :obj:`int` or :obj:`float`
         The temperature given in the specified ``temperature_unit``.
     temperature_unit : {``"K"``, ``"k"``, ``"C"``, ``"c"``, ``"F"``, ``"f"``}, default=``"K"``
         The unit of the ``temperature`` which can be:
@@ -63,7 +63,7 @@ def black_body_spectrum(
 
     Returns
     -------
-    black_body_spectrum : :class:`numpy.ndarray` of shape (1,) or (n,)
+    black_body_spectrum : :obj:`numpy.ndarray` of shape (1,) or (n,)
         The blackbody radiation spectrum in W * cm / (m² * sr) evaluated at the
         specified ``wavenumbers``.
         It will be an Array even if ``wavenumbers`` was a scalar.
@@ -138,7 +138,7 @@ def black_body_peak(
 
     Parameters
     ----------
-    temperature : class:`int` or :class:`float`
+    temperature : :obj:`int` or :obj:`float`
         The temperature given in the specified ``temperature_unit``.
     temperature_unit : {``"K"``, ``"k"``, ``"C"``, ``"c"``, ``"F"``, ``"f"``}, default=``"K"``
         The unit of the ``temperature`` which can be:
@@ -149,9 +149,9 @@ def black_body_peak(
 
     Returns
     -------
-    black_body_peak_wavenumber : :class:`float`
+    black_body_peak_wavenumber : :obj:`float`
         The wavenumber in 1 / cm at which the blackbody radiation spectrum peaks.
-    black_body_peak_intensity : :class:`float`
+    black_body_peak_intensity : :obj:`float`
         The peak intensity in W * cm / (m² * sr) of the blackbody radiation spectrum.
 
     Raises

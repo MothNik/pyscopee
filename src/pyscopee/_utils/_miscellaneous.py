@@ -28,12 +28,12 @@ def split_class_name_to_readable(obj: object) -> str:
 
     Parameters
     ----------
-    obj : :class:`object`
+    obj : object
         The object whose class name is to be split.
 
     Returns
     -------
-    readable_class_name : :class:`str`
+    readable_class_name : :obj:`str`
         The class name with spaces inserted between capital letters.
 
     """
@@ -51,11 +51,11 @@ def warn_verbose(
 
     Parameters
     ----------
-    message : :class:`str`
+    message : :obj:`str`
         The warning message.
-    category : :class:`type`
+    category : :obj:`type`
         The warning category.
-    issue_warning : :class:`bool`
+    issue_warning : :obj:`bool`
         Whether to issue the warning (``True``) or not (``False``).
 
     """  # noqa: E501

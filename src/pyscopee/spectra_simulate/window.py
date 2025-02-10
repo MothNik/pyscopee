@@ -55,13 +55,13 @@ def window_three_segment_smooth_cutoff(
 
     Parameters
     ----------
-    x : class:`int` or :class:`float` or :class:`numpy.ndarray` of shape (n,)
+    x : :obj:`int` or :obj:`float` or :obj:`numpy.ndarray` of shape (n,)
         The x-values for which the window function should be computed.
         Its data type is internally promoted to ``numpy.float64``.
-    x_min1, x_max1, x_min2, x_max2 : class:`int` or :class:`float`
+    x_min1, x_max1, x_min2, x_max2 : :obj:`int` or :obj:`float`
         The boundaries of the ramp-up and ramp-down regions, respectively.
         Flipped or coinciding values for the individual parts will result in an error.
-    exponent1, exponent2 : class:`int` or :class:`float`, default=``20``
+    exponent1, exponent2 : :obj:`int` or :obj:`float`, default=``20``
         The exponents ``m1`` and ``m2`` that control how sharp the ramp-up and ramp-down
         are, respectively.
         A higher value results in a sharper cutoff.
@@ -70,7 +70,7 @@ def window_three_segment_smooth_cutoff(
 
     Returns
     -------
-    window : :class:`numpy.ndarray` of shape (n,) of dtype ``numpy.float64``
+    window : :obj:`numpy.ndarray` of shape (n,) of dtype ``numpy.float64``
         The window function values for the given x-values.
         It will be an Array even if ``x`` is a scalar.
 
@@ -88,7 +88,7 @@ def window_three_segment_smooth_cutoff(
     .. [1] Lee L., et al., Extension of the Norton–Beer apodizing functions in Fourier
        transform spectrometry, Applied Optics, Volume 6, Issue 20, pp. 4622 - 4626,
        2012, DOI: 10.1364/AO.51.004622
-       
+
     """
 
     # --- Input Validation ---

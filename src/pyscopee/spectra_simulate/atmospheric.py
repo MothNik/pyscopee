@@ -56,9 +56,9 @@ def atmospheric_transmittance(
 
     Parameters
     ----------
-    wavenumbers : class:`int` or :class:`float` or :class:`numpy.ndarray` of shape (n,)
+    wavenumbers : :obj:`int` or :obj:`float` or :obj:`numpy.ndarray` of shape (n,)
         The wavenumber(s) in 1 / cm.
-    temperature : class:`int` or :class:`float`, default=``25.0``
+    temperature : :obj:`int` or :obj:`float`, default=``25.0``
         The temperature given in the specified ``temperature_unit``.
     temperature_unit : {``"K"``, ``"k"``, ``"C"``, ``"c"``, ``"F"``, ``"f"``}, default=``"K"``
         The unit of the ``temperature`` which can be:
@@ -67,7 +67,7 @@ def atmospheric_transmittance(
         - ``"C"`` or ``"c"``: degree Celsius
         - ``"F"`` or ``"f"``: degree Fahrenheit
 
-    pressure : class:`int` or :class:`float`, default=``1.0``
+    pressure : :obj:`int` or :obj:`float`, default=``1.0``
         The pressure given in the specified ``pressure_unit``.
     pressure_unit : {``"bar"``, ``"mbar"``, ``"hPa"``, ``"kPa"``, ``"atm"``}, default=``"atm"``
         The unit of the ``pressure`` which can be:
@@ -78,7 +78,7 @@ def atmospheric_transmittance(
         - ``"kPa"``: kilopascal
         - ``"atm"``: atmospheres
 
-    h2o_mole_fraction, co2_mole_fraction : class:`int` or :class:`float`, default=(``20_000.0``, ``420.0``)
+    h2o_mole_fraction, co2_mole_fraction : :onj:`int` or :obj:`float`, default=(``20_000.0``, ``420.0``)
         The mole fraction of water vapour and carbon dioxide given in the specified
         ``h2o_unit`` and ``co2_unit``, respectively.
     h2o_unit, co2_unit : {``"ppmv"``, ``"percent"``, ``"%"``}, default=``"ppmv"``
@@ -87,7 +87,7 @@ def atmospheric_transmittance(
         - ``"ppmv"``: parts per million by volume
         - ``"percent"`` or ``"%"``: percent
 
-    path_length : class:`int` or :class:`float`, default=``25.0``
+    path_length : :obj:`int` or :obj:`float`, default=``25.0``
         The path length given in the specified ``path_length_unit``.
     path_length_unit : {``"m"``, ``"dm"``, ``"cm"``, ``"mm"``, ``"µm"``}, default=``"cm"``
         The unit of the ``path_length`` which can be:
@@ -98,15 +98,15 @@ def atmospheric_transmittance(
         - ``"mm"``: millimeter
         - ``"µm"``: micrometer
 
-    verbose : :class:`bool`, default=``False``
+    verbose : :obj:`bool`, default=``False``
         Whether to print additional information (``True``) or not (``False``).
-    kwargs : :class:`dict`
+    kwargs : :obj:`dict`
         Additional keyword arguments to be passed to the :func:`radis.calc_spectrum`
         function.
 
     Returns
     -------
-    atmospheric_transmittance : :class:`numpy.ndarray` of shape (1,) or (n,)
+    atmospheric_transmittance : :obj:`numpy.ndarray` of shape (1,) or (n,)
         The atmospheric transmittance for the given wavenumbers as a dimensionless
         quantity from ``0.0`` to ``1.0``.
         It will be an Array even if ``wavenumbers`` was a scalar.

@@ -69,7 +69,7 @@ def _convert_to_validated_type(
     ----------
     value: any
         The value to convert.
-    name : :class:`str`
+    name : :obj:`str`
         The name of the value used for error messages.
     output_type : type
         The type to convert the value to.
@@ -125,20 +125,20 @@ def _get_bound_validated_value(
 
     Parameters
     ----------
-    value : :class:`float` or :class:`int`
+    value : :obj:`float` or :obj:`int`
         The value to check.
-    name : :class:`str`
+    name : :obj:`str`
         The name of the value used for error messages.
-    bound : :class:`float` or :class:`int` or ``None``
+    bound : :obj:`float` or :obj:`int` or ``None``
         The bound to compare against.
         If ``None``, no comparison is performed.
-    bound_kind : :class:`_BoundKind`
+    bound_kind : :obj:`_BoundKind`
         The bound kind to compare against, i.e., either the lower or upper bound.
-    bound_inclusive : :class:`bool`
+    bound_inclusive : :obj:`bool`
         Whether the bound comparison is inclusive (with comparison operators ``>=`` and
         ``<=``; ``True``) or exclusive (with comparison operators ``>`` and ``<``;
         ``False``).
-    clip : :class:`bool`
+    clip : :obj:`bool`
         Whether to clip the ``value`` to the `bound`` if the comparison is not
         satisfied.
         For
@@ -152,7 +152,7 @@ def _get_bound_validated_value(
 
     Returns
     -------
-    validated_value : :class:`float` or :class:`int`
+    validated_value : :obj:`float` or :obj:`int`
         The validated value.
 
     Raises
@@ -211,7 +211,7 @@ def _get_validated_scalar(
     ----------
     value: any
         The value to validate.
-    name : :class:`str`
+    name : :obj:`str`
         The name of the value used for error messages.
     output_type : type
         The type to convert the value to.
@@ -219,20 +219,20 @@ def _get_validated_scalar(
     allowed_from_types : (type, ...)
         The allowed types for the value from which it can be converted.
         It should not contain ``output_type``.
-    min_value, max_value : :class:`float` or :class:`int` or ``None``
+    min_value, max_value : :obj:`float` or :obj:`int` or ``None``
         The minimum and maximum allowed values.
         If ``None``, the value is not checked against the respective bound.
-    min_inclusive, max_inclusive : :class:`bool`
+    min_inclusive, max_inclusive : :obj:`bool`
         Whether the minimum and maximum value bounds are inclusive (with comparison
         operators ``>=`` and ``<=``; ``True``) or exclusive (with comparison operators
         ``>`` and ``<``; ``False``).
-    clip : :class:`bool`
+    clip : :obj:`bool`
         Whether to clip the value to the allowed range if it is not within
         [``min_value``, ``max_value``].
 
     Returns
     -------
-    validated_value : :class:`float` or :class:`int`
+    validated_value : :obj:`float` or :obj:`int`
         The validated value.
 
     Raises
@@ -302,7 +302,7 @@ def isinstance_incl_none(
 
     Returns
     -------
-    is_instance : :class:`bool`
+    is_instance : :obj:`bool`
         Whether the value is an instance of one of the provided types.
 
     """
@@ -335,22 +335,22 @@ def get_validated_integer(
     ----------
     value : any
         The value to check.
-    name : :class:`str`
+    name : :obj:`str`
         The name of the value used for error messages.
-    min_value, max_value : :class:`int` or ``None``, default=``None``
+    min_value, max_value : :obj:`int` or ``None``, default=``None``
         The minimum and maximum allowed values.
         If ``None``, the value is not checked against the respective bound.
-    min_inclusive, max_inclusive : :class:`bool`, default=``True``
+    min_inclusive, max_inclusive : :obj:`bool`, default=``True``
         Whether the minimum and maximum value bounds are inclusive (with comparison
         operators ``>=`` and ``<=``; ``True``) or exclusive (with comparison operators
         ``>`` and ``<``; ``False``).
-    clip : :class:`bool`, default=``False``
+    clip : :obj:`bool`, default=``False``
         Whether to clip the value to the allowed range if it is not within
         [``min_value``, ``max_value``].
 
     Returns
     -------
-    checked_value : :class:`int`
+    checked_value : :obj:`int`
         The checked value as an integer.
 
     Raises
@@ -391,22 +391,22 @@ def get_validated_real_numeric(
     ----------
     value: any
         The value to check.
-    name : :class:`str`
+    name : :obj:`str`
         The name of the value used for error messages.
-    min_value, max_value : :class:`float` or ``None``, default=``None``
+    min_value, max_value : :obj:`float` or ``None``, default=``None``
         The minimum and maximum allowed values.
         If ``None``, the value is not checked against the respective bound.
-    min_inclusive, max_inclusive : :class:`bool`, default=``True``
+    min_inclusive, max_inclusive : :obj:`bool`, default=``True``
         Whether the minimum and maximum value bounds are inclusive (with comparison
         operators ``>=`` and ``<=``; ``True``) or exclusive (with comparison operators
         ``>`` and ``<``; ``False``).
-    clip : :class:`bool`, default=``False``
+    clip : :obj:`bool`, default=``False``
         Whether to clip the value to the allowed range if it is not within
         [``min_value``, ``max_value``].
 
     Returns
     -------
-    checked_value : :class:`float`
+    checked_value : :obj:`float`
         The checked value as a float.
 
     Raises
@@ -450,20 +450,20 @@ def get_validated_real_numeric_1d_array_like(
     ----------
     value: any
         The value to check.
-    name : :class:`str`
+    name : :obj:`str`
         The name of the value used for error messages.
-    min_size, max_size : :class:`int` or ``None``, default=``None``
+    min_size, max_size : :obj:`int` or ``None``, default=``None``
         The minimum and maximum allowed size of the 1D Array-like.
         If ``None``, the size is not checked against the respective bound.
         Arrays of size 0 will always be considered invalid.
-    output_dtype : :class:`type` or ``None``, default=``None``
+    output_dtype : :obj:`type` or ``None``, default=``None``
         The data type of the output NumPy Array.
         If ``None``, the data type is not changed.
         The conversion is done with ``value.astype(output_dtype, casting="safe")``.
 
     Returns
     -------
-    checked_value : :class:`numpy.ndarray` of shape (n, )
+    checked_value : :obj:`numpy.ndarray` of shape (n, )
         The checked value.
 
     Raises
@@ -548,13 +548,13 @@ def validate_1d_array_is_evenly_spaced(
 
     Parameters
     ----------
-    value : :class:`numpy.ndarray` of shape (n, )
+    value : :obj:`numpy.ndarray` of shape (n, )
         The 1D Array to validate.
         It may not be empty.
         It is promoted to ``numpy.float64`` for the comparison.
-    name : :class:`str`
+    name : :obj:`str`
         The name of the value used for error messages.
-    atol, rtol : :class:`float`, default=``1e-8`` and ``1e-5``
+    atol, rtol : :obj:`float`, default=``1e-8`` and ``1e-5``
         The absolute and relative tolerances for the spacing checks that will be
         passed to :func:`numpy.allclose` as ``np.allclose(value, reference, atol=atol, rtol=rtol)``.
         ``reference`` is created by :func:`numpy.linspace` as

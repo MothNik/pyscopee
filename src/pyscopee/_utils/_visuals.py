@@ -41,7 +41,7 @@ def get_pyscopee_style() -> Path:
 
     Returns
     -------
-    style_path : :class:`pathlib.Path`
+    style_path : :obj:`pathlib.Path`
         The path to the ``pyscopee`` style for plots.
 
     """
@@ -57,14 +57,14 @@ def _concatenate_pyscopee_with_other_styles(
 
     Parameters
     ----------
-    other_styles : :class:`str`, :class:`pathlib.Path`, [:class:`str` or :class:`pathlib.Path`], or ``None``, default=``None``
+    other_styles : :obj:`str`, :obj:`pathlib.Path`, [:obj:`str` or :obj:`pathlib.Path`], or ``None``, default=``None``
         The name of the style or a list of style names to apply in addition to the
         default style for plots in the ``pyscopee`` package.
         If ``None``, only the default style is applied.
 
     Returns
     -------
-    style_paths : [:class:`str` or :class:`pathlib.Path`]
+    style_paths : [:obj:`str` or :obj:`pathlib.Path`]
         The list of style paths to apply to plots.
 
     """  # noqa: E501
@@ -85,7 +85,7 @@ def apply_pyscopee_plot_style(other_styles: PlotStylePaths = None) -> None:
 
     Parameters
     ----------
-    other_styles : :class:`str`, :class:`pathlib.Path`, [:class:`str` or :class:`pathlib.Path`], or ``None``, default=``None``
+    other_styles : :obj:`str`, :obj:`pathlib.Path`, [:obj:`str` or :obj:`pathlib.Path`], or ``None``, default=``None``
         The name of the style or a list of style names to apply in addition to the
         default style for plots in the ``pyscopee`` package.
         If ``None``, only the default style is applied.
@@ -108,11 +108,11 @@ def pyscopee_plot_style(
 
     Parameters
     ----------
-    other_styles : :class:`str`, [:class:`str`], or ``None``, default=``None``
+    other_styles : :obj:`str`, [:obj:`str`], or ``None``, default=``None``
         The name of the style or a list of style names to apply in addition to the
         default style for plots in the ``pyscopee`` package.
         If ``None``, only the default style is applied.
-    enable : :class:`bool`, default=``True``
+    enable : :obj:`bool`, default=``True``
         Whether to enable the style within the context manager (``True``) or not
         (``False``).
         This is useful when it's not sure if the style should be enabled or not, and
