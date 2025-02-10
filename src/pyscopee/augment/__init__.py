@@ -16,3 +16,8 @@ from .extrapolate import (  # noqa: F401
     extend_grid_points,
     extrapolate_autoregressive,
 )
+from .cross_fade import (  # noqa: F401
+    cross_fade,
+    linear_cross_fade_weights,
+    smooth_tanh_cross_fade_weights,
+)
