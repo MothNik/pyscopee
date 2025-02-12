@@ -28,13 +28,14 @@ from pyscopee._utils import jit
     nopython=True,
     # cache=True,
 )
-def _make_central_finite_difference_specs(
+def _make_transposed_central_finite_difference_specs(
     num_points: int,
     order: Literal[2, 4],
 ) -> Tuple[NDArray[np.float64], NDArray[np.int64]]:
     """
-    Generates the specifications for a square central finite difference matrix ``D`` in
-    a hybrid format between the sparse CSR format and the LAPACK banded format.
+    Generates the specifications for a transposed square central finite difference
+    matrix ``D.T`` in a hybrid format between the sparse CSR format and the LAPACK
+    banded format.
     A repeating boundary condition is assumed.
 
     Parameters
@@ -59,10 +60,11 @@ def _make_central_finite_difference_specs(
 
     Notes
     -----
-    Given that it fits into memory, the dense matrix can be reconstructed as follows:
+    Given that it fits into memory, the transposed dense matrix can be reconstructed as
+    follows:
 
     ```python
-    dense_matrix = np.zeros(
+    transposed_dense_matrix = np.zeros(
         shape=(num_points, num_points),
         dtype=np.float64,
     )
@@ -70,10 +72,12 @@ def _make_central_finite_difference_specs(
     for row_index, (row_data, row_indices) in enumerate(zip(data, indices)):
         dense_index_from, dense_index_to = row_indices
         num_elements = index_to - index_from
-        dense_matrix[row_index, dense_index_from:dense_index_to] = row_data[0:num_elements]
+        transposed_dense_matrix[row_index, dense_index_from:dense_index_to] = (
+            row_data[0:num_elements]
+        )
     ```
 
-    So, the dense matrix
+    So, the transposed dense matrix
 
     ```python
     np.array(
@@ -149,14 +153,14 @@ def _make_central_finite_difference_specs(
     else:
         # first leading row with repeating boundary condition
         data[0, 0] = 3.0
-        data[0, 1] = -4.0
+        data[0, 1] = -3.0
         data[0, 2] = 1.0
 
         indices[0, 0] = 0
         indices[0, 1] = 3
 
         # second leading row with repeating boundary condition
-        data[1, 0] = -3.0
+        data[1, 0] = -4.0
         data[1, 1] = 6.0
         data[1, 2] = -4.0
         data[1, 3] = 1.0
@@ -168,14 +172,14 @@ def _make_central_finite_difference_specs(
         data[num_points - 2, 0] = 1.0
         data[num_points - 2, 1] = -4.0
         data[num_points - 2, 2] = 6.0
-        data[num_points - 2, 3] = -3.0
+        data[num_points - 2, 3] = -4.0
 
         indices[num_points - 2, 0] = num_points - 4
         indices[num_points - 2, 1] = num_points
 
         # last trailing row with repeating boundary condition
         data[num_points - 1, 0] = 1.0
-        data[num_points - 1, 1] = -4.0
+        data[num_points - 1, 1] = -3.0
         data[num_points - 1, 2] = 3.0
 
         indices[num_points - 1, 0] = num_points - 3
@@ -204,7 +208,7 @@ def _make_central_finite_difference_specs(
 @jit(
     "Tuple((int64, int64, int64, int64))(int64, int64, int64, int64)",
     nopython=True,
-    # inline="always",
+    inline="always",
     # cache=True,
 )
 def _get_dot_overlap_indices(
@@ -231,23 +235,23 @@ def _get_dot_overlap_indices(
     parallel=True,
     # cache=True,
 )
-def _square_central_finite_difference_matrix(
+def _square_transposed_central_finite_difference_matrix(
     data: NDArray[np.float64],
     indices: NDArray[np.int64],
     order: Literal[2, 4],
 ) -> NDArray[np.float64]:
     """
     Computes the squared central finite difference matrix ``D.T @ D`` from the
-    specifications of the central finite difference matrix ``D``.
+    specifications of the transposed central finite difference matrix ``D.T``.
 
     For the specifications, please refer to the documentation of
-    :func:`_make_central_finite_difference_specs`.
+    :func:`_make_transposed_central_finite_difference_specs`.
 
     Parameters
     ----------
     data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
-        The non-zero entries of the finite difference matrix vertically stacked as
-        one row for each row of the corresponding dense matrix.
+        The non-zero entries of the transposed finite difference matrix vertically
+        stacked as one row for each row of the corresponding dense matrix.
     indices : :obj:`numpy.ndarray` of shape (num_points, 2) and dtype ``numpy.int64``
         The column indices for the non-zero entries in ``data`` vertically stacked as
         one row for each row of the corresponding dense matrix.
@@ -362,16 +366,16 @@ if __name__ == "__main__":
 
     from time import perf_counter_ns
 
-    num_points = 32_000
+    num_points = 5
     order = 4
 
-    data, indices = _make_central_finite_difference_specs(
+    data, indices = _make_transposed_central_finite_difference_specs(
         num_points=num_points,
         order=order,
     )
 
     start_time = perf_counter_ns()
-    data, indices = _make_central_finite_difference_specs(
+    data, indices = _make_transposed_central_finite_difference_specs(
         num_points=num_points,
         order=order,
     )
@@ -389,16 +393,16 @@ if __name__ == "__main__":
         num_elements = index_to - index_from
         dense_matrix[row_index, index_from:index_to] = row_data[0:num_elements]
 
-    print(dense_matrix)
+    print("both close?", np.allclose(dense_matrix.T, dense_matrix))
 
-    test = _square_central_finite_difference_matrix(
+    test = _square_transposed_central_finite_difference_matrix(
         data=data,
         indices=indices,
         order=order,
     )
 
     start_time = perf_counter_ns()
-    test = _square_central_finite_difference_matrix(
+    test = _square_transposed_central_finite_difference_matrix(
         data=data,
         indices=indices,
         order=order,
