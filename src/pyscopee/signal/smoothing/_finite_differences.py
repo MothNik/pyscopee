@@ -15,21 +15,26 @@ for the Whittaker-Henderson smoother, more specifically the penalty matrix
 from typing import Literal, Tuple
 
 import numpy as np
+from numba import prange
 from numpy.typing import NDArray
-from scipy.sparse import csr_matrix
 
 from pyscopee._utils import jit
 
 # === Functions ===
 
 
-@jit
-def _make_central_finite_difference_csr_specs(
+@jit(
+    "Tuple((float64[:,::1], int64[:,::1]))(int64, int64)",
+    nopython=True,
+    # cache=True,
+)
+def _make_central_finite_difference_specs(
     num_points: int,
     order: Literal[2, 4],
-) -> Tuple[NDArray[np.float64], NDArray[np.int64], NDArray[np.int64]]:
+) -> Tuple[NDArray[np.float64], NDArray[np.int64]]:
     """
-    Generates the specifications for a central finite difference matrix in CSR format.
+    Generates the specifications for a square central finite difference matrix ``D`` in
+    a hybrid format between the sparse CSR format and the LAPACK banded format.
     A repeating boundary condition is assumed.
 
     Parameters
@@ -41,119 +46,367 @@ def _make_central_finite_difference_csr_specs(
 
     Returns
     -------
-    data : :obj:`numpy.ndarray` of shape (m,) of dtype ``numpy.float64``
-        The non-zero entries of the matrix.
-    indices : :obj:`numpy.ndarray` of shape (m,) of dtype ``numpy.int64``
-        The column indices of the non-zero entries.
-    indptr : :obj:`numpy.ndarray` of shape (n + 1,) of dtype ``numpy.int64``
-        The index pointers for the rows of the matrix.
+    data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
+        The non-zero entries of the finite difference matrix vertically stacked as
+        one row for each row of the corresponding dense matrix.
+        Please refer to the Notes section for details.
+    indices : :obj:`numpy.ndarray` of shape (num_points, 2) and dtype ``numpy.int64``
+        The column indices for the non-zero entries in ``data`` vertically stacked as
+        one row for each row of the corresponding dense matrix.
+        Its first and second column correspond to the ``start`` and ``stop`` of the
+        ``slice(start, stop)``, respectively.
+        Please refer to the Notes section for details.
 
-    """
+    Notes
+    -----
+    Given that it fits into memory, the dense matrix can be reconstructed as follows:
 
-    # the respective coefficients are extracted together with the number of additional
-    # points in the leading and trailing rows that are not just a repetition of the
-    # coefficients
+    ```python
+    dense_matrix = np.zeros(
+        shape=(num_points, num_points),
+        dtype=np.float64,
+    )
+
+    for row_index, (row_data, row_indices) in enumerate(zip(data, indices)):
+        dense_index_from, dense_index_to = row_indices
+        num_elements = index_to - index_from
+        dense_matrix[row_index, dense_index_from:dense_index_to] = row_data[0:num_elements]
+    ```
+
+    So, the dense matrix
+
+    ```python
+    np.array(
+        [
+            [-1, 1, 0, 0, 0],
+            [1, -2, 1, 0, 0],
+            [0, 1, -2, 1, 0],
+            [0, 0, 1, -2, 1],
+            [0, 0, 0, 1, -1],
+        ]
+    )
+    ```
+
+    would be stored as
+
+    ```python
+    data = np.array(
+        [
+            [-1, 1, x],
+            [1, -2, 1],
+            [1, -2, 1],
+            [1, -2, 1],
+            [1, -1, x],
+        ]
+    )
+
+    indices = np.array(
+        [
+            [0, 2],
+            [0, 3],
+            [1, 4],
+            [2, 5],
+            [3, 5],
+        ]
+    )
+    ```
+
+    where the entries filled with ``x`` are not used.
+
+    """  # noqa: E501
+
+    # the respective coefficients for the normal as well as the leading and trailing
+    # rows are extracted based on the difference order
+    data = np.empty(
+        shape=(num_points, order + 1),
+        dtype=np.float64,
+    )
+    indices = np.empty(
+        shape=(num_points, 2),
+        dtype=np.int64,
+    )
+
+    # the coefficients are extracted and the leading and trailing rows are already
+    # pre-filled based on the difference order
     if order == 2:
-        coeffs = np.array(
-            [1.0, -2.0, 1.0],
-            dtype=np.float64,
-        )
-        num_additional_points = 4
+        # leading row with repeating boundary condition
+        data[0, 0] = -1.0
+        data[0, 1] = 1.0
+
+        indices[0, 0] = 0
+        indices[0, 1] = 2
+
+        # trailing row with repeating boundary condition
+        data[num_points - 1, 0] = 1.0
+        data[num_points - 1, 1] = -1.0
+
+        indices[num_points - 1, 0] = num_points - 2
+        indices[num_points - 1, 1] = num_points
+
+        # finally, the central coefficients are obtained
+        central_coefficients = np.array([1.0, -2.0, 1.0], dtype=np.float64)
 
     else:
-        coeffs = np.array(
-            [1.0, -4.0, 6.0, -4.0, 1.0],
-            dtype=np.float64,
-        )
-        num_additional_points = 14
+        # first leading row with repeating boundary condition
+        data[0, 0] = 3.0
+        data[0, 1] = -4.0
+        data[0, 2] = 1.0
 
-    # the number of data points is computed to initialise the CSR arrays
-    num_coeffs = coeffs.size
-    half_num_coeffs_ceil = -(-coeffs.size // 2)  # NOTE: safe ceil division
-    num_normal_rows = num_points - order
-    num_nonzero_entries = num_normal_rows * num_coeffs + num_additional_points
+        indices[0, 0] = 0
+        indices[0, 1] = 3
 
-    data = np.empty(shape=(num_nonzero_entries,), dtype=np.float64)
-    indices = np.empty(shape=(num_nonzero_entries,), dtype=np.int64)
-    indptr = np.empty(shape=(num_points + 1,), dtype=np.int64)
+        # second leading row with repeating boundary condition
+        data[1, 0] = -3.0
+        data[1, 1] = 6.0
+        data[1, 2] = -4.0
+        data[1, 3] = 1.0
 
-    # the first rows are handled separately
-    data_index_from = 0
-    indptr[0] = 0
-    for row_index in range(0, order // 2):
-        num_summed_points = half_num_coeffs_ceil - row_index
-        num_added_points = num_coeffs - num_summed_points + 1
+        indices[1, 0] = 0
+        indices[1, 1] = 4
 
-        data_index_to = data_index_from + num_added_points
+        # second to last trailing row with repeating boundary condition
+        data[num_points - 2, 0] = 1.0
+        data[num_points - 2, 1] = -4.0
+        data[num_points - 2, 2] = 6.0
+        data[num_points - 2, 3] = -3.0
 
-        data[data_index_from] = coeffs[0:num_summed_points].sum()
-        data[data_index_from + 1 : data_index_to] = coeffs[num_summed_points:num_coeffs]
+        indices[num_points - 2, 0] = num_points - 4
+        indices[num_points - 2, 1] = num_points
 
-        for column_index, csr_index in enumerate(range(data_index_from, data_index_to)):
-            indices[csr_index] = column_index
+        # last trailing row with repeating boundary condition
+        data[num_points - 1, 0] = 1.0
+        data[num_points - 1, 1] = -4.0
+        data[num_points - 1, 2] = 3.0
 
-        indptr[row_index + 1] = indptr[row_index] + num_added_points
+        indices[num_points - 1, 0] = num_points - 3
+        indices[num_points - 1, 1] = num_points
 
-        data_index_from = data_index_to
+        # finally, the central coefficients are obtained
+        central_coefficients = np.array([1.0, -4.0, 6.0, -4.0, 1.0], dtype=np.float64)
 
-    for row_index in range(order // 2, num_points - order // 2):
-        data_index_to = data_index_from + num_coeffs
+    # the central coefficients are filled in
+    num_leading_rows = order // 2
+    data[num_leading_rows : num_points - num_leading_rows, :] = central_coefficients
+    indices[num_leading_rows : num_points - num_leading_rows, 0] = np.arange(
+        0,
+        num_points - order,
+        dtype=np.int64,
+    )
+    indices[num_leading_rows : num_points - num_leading_rows, 1] = np.arange(
+        order + 1,
+        num_points + 1,
+        dtype=np.int64,
+    )
 
-        data[data_index_from:data_index_to] = coeffs
-        for column_index, csr_index in enumerate(range(data_index_from, data_index_to)):
-            indices[csr_index] = column_index + (row_index - order // 2)
+    return data, indices
 
-        indptr[row_index + 1] = indptr[row_index] + num_coeffs
 
-        data_index_from = data_index_to
+@jit(
+    "Tuple((int64, int64, int64, int64))(int64, int64, int64, int64)",
+    nopython=True,
+    # inline="always",
+    # cache=True,
+)
+def _get_dot_overlap_indices(
+    row_index_from: int,
+    row_index_to: int,
+    column_index_from: int,
+    column_index_to: int,
+) -> Tuple[int, int, int, int]:
 
-    # the last rows are handled separately
-    for row_index in range(num_points - order // 2, num_points):
-        num_summed_points = half_num_coeffs_ceil - (num_points - row_index) + 1
-        num_added_points = num_coeffs - num_summed_points + 1
+    dot_index_from = max(row_index_from, column_index_from)
+    dot_index_to = min(row_index_to, column_index_to)
 
-        data_index_to = data_index_from + num_added_points
+    return (
+        dot_index_from - row_index_from,
+        dot_index_to - row_index_from,
+        dot_index_from - column_index_from,
+        dot_index_to - column_index_from,
+    )
 
-        data[data_index_from : data_index_to - 1] = coeffs[
-            0 : num_coeffs - num_summed_points
+
+@jit(
+    "float64[:,::1](float64[:,::1], int64[:,::1], int64)",
+    nopython=True,
+    parallel=True,
+    # cache=True,
+)
+def _square_central_finite_difference_matrix(
+    data: NDArray[np.float64],
+    indices: NDArray[np.int64],
+    order: Literal[2, 4],
+) -> NDArray[np.float64]:
+    """
+    Computes the squared central finite difference matrix ``D.T @ D`` from the
+    specifications of the central finite difference matrix ``D``.
+
+    For the specifications, please refer to the documentation of
+    :func:`_make_central_finite_difference_specs`.
+
+    Parameters
+    ----------
+    data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
+        The non-zero entries of the finite difference matrix vertically stacked as
+        one row for each row of the corresponding dense matrix.
+    indices : :obj:`numpy.ndarray` of shape (num_points, 2) and dtype ``numpy.int64``
+        The column indices for the non-zero entries in ``data`` vertically stacked as
+        one row for each row of the corresponding dense matrix.
+        Its first and second column correspond to the ``start`` and ``stop`` of the
+        ``slice(start, stop)``, respectively.
+    order : {``2``, ``4``}
+        The order of the finite difference matrix.
+
+    Returns
+    -------
+    squared_data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
+        The matrix ``D.T @  D`` in a vertically flipped LAPACK lower symmetric banded
+        format.
+        Please refer to the Notes section for details.
+
+    Notes
+    -----
+    For difference order 2, the symmetric squared matrix that looks like the following
+    in its dense form
+
+    ```python
+    np.array(
+        [
+            [a00, a01, a02,   0,   0],
+            [a01, a11, a12, a13,   0],
+            [a02, a12, a22, a23, a24],
+            [  0, a13, a23, a33, a34],
+            [  0,   0, a24, a34, a44],
         ]
-        data[data_index_to - 1] = coeffs[
-            num_coeffs - num_summed_points : num_coeffs
-        ].sum()
+    )
+    ```
 
-        for column_index, csr_index in enumerate(range(data_index_from, data_index_to)):
-            indices[csr_index] = column_index + (row_index - order // 2)
+    would be stored in the LAPACK lower symmetric banded format as
 
-        indptr[row_index + 1] = indptr[row_index] + num_added_points
+    ```python
+    np.array(
+        [
+            [a00, a11, a22, a33, a44],
+            [a01, a12, a23, a34,   x],
+            [a02, a13, a24,   x,   x],
+        ]
+    )
+    ```
 
-        data_index_from = data_index_to
+    where the entries filled with ``x`` are not used.
+    This function however returns
 
-    return data, indices, indptr
+    ```python
+    np.array(
+        [
+            [a00, a01, a02],
+            [a11, a12, a13],
+            [a22, a23, a24],
+            [a33, a34,   x],
+            [a44,   x,   x],
+        ]
+    )
+    ```
+
+    so basically, the same matrix as the LAPACK matrix with a C-style row-major
+    ordering rather than a Fortran-style column-major ordering.
+
+    """  # noqa: E501
+
+    # the number of diagonals (including the main diagonal) in the upper part is given
+    # by the order; this value determined how many columns need to be considered for
+    # each row (except for the last ``order`` rows)
+    bandwidth = order + 1
+
+    # the squared data and indices are pre-allocated
+    squared_data = np.empty_like(data)
+
+    # the matrix product is computed row by row for the upper triangular part only
+    # due to symmetry
+    num_points = data.shape[0]
+    for row_index in prange(0, num_points):
+        dense_index_from, dense_index_to = indices[row_index, ::]
+        num_elements = dense_index_to - dense_index_from
+
+        # the product of the row with itself is computed directly
+        squared_data[row_index, 0] = np.dot(
+            data[row_index, 0:num_elements],
+            data[row_index, 0:num_elements],
+        )
+
+        # the product with the following columns is computed
+        for col_index in range(
+            row_index + 1,
+            min(row_index + bandwidth, num_points),
+        ):
+            (
+                row_dot_index_from,
+                row_dot_index_to,
+                column_dot_index_from,
+                column_dot_index_to,
+            ) = _get_dot_overlap_indices(
+                row_index_from=dense_index_from,
+                row_index_to=dense_index_to,
+                column_index_from=indices[col_index, 0],
+                column_index_to=indices[col_index, 1],
+            )
+
+            squared_data[row_index, col_index - row_index] = np.dot(
+                data[row_index, row_dot_index_from:row_dot_index_to],
+                data[col_index, column_dot_index_from:column_dot_index_to],
+            )
+
+    return squared_data
 
 
-num_points = 32_000
-order = 2
+if __name__ == "__main__":
 
-from time import perf_counter_ns
+    from time import perf_counter_ns
 
-data, indices, indptr = _make_central_finite_difference_csr_specs(
-    num_points=num_points,
-    order=order,
-)
+    num_points = 32_000
+    order = 4
 
-start = perf_counter_ns()
-data, indices, indptr = _make_central_finite_difference_csr_specs(
-    num_points=num_points,
-    order=order,
-)
-print(f"Took {(1e-3 * (perf_counter_ns() - start)):.0f} mus")
+    data, indices = _make_central_finite_difference_specs(
+        num_points=num_points,
+        order=order,
+    )
 
-start = perf_counter_ns()
-test = csr_matrix((data, indices, indptr), shape=(num_points, num_points))
-print(f"Took {(1e-3 * (perf_counter_ns() - start)):.0f} mus")
+    start_time = perf_counter_ns()
+    data, indices = _make_central_finite_difference_specs(
+        num_points=num_points,
+        order=order,
+    )
+    stop_time = perf_counter_ns()
 
-start = perf_counter_ns()
-test.T @ test
-print(f"Took {(1e-3 * (perf_counter_ns() - start)):.0f} mus")
+    print(f"Took {(1e-3*(stop_time - start_time)):.0f} µs to generate the specs.")
 
-print(test.toarray())
+    dense_matrix = np.zeros(
+        shape=(num_points, num_points),
+        dtype=np.float64,
+    )
+
+    for row_index, (row_data, row_indices) in enumerate(zip(data, indices)):
+        index_from, index_to = row_indices
+        num_elements = index_to - index_from
+        dense_matrix[row_index, index_from:index_to] = row_data[0:num_elements]
+
+    print(dense_matrix)
+
+    test = _square_central_finite_difference_matrix(
+        data=data,
+        indices=indices,
+        order=order,
+    )
+
+    start_time = perf_counter_ns()
+    test = _square_central_finite_difference_matrix(
+        data=data,
+        indices=indices,
+        order=order,
+    )
+    stop_time = perf_counter_ns()
+
+    print(
+        f"Took {(1e-3*(stop_time - start_time)):.0f} µs to compute the squared matrix."
+    )
+
+    print(test)
