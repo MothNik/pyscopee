@@ -79,7 +79,7 @@ from pyscopee._utils import jit
 @jit(
     "Tuple((float64[:,::1], int64[:,::1]))(int64, int64, boolean)",
     nopython=True,
-    # cache=True,
+    cache=True,
 )
 def _make_central_finite_difference_specs(
     num_points: int,
@@ -219,7 +219,7 @@ def _make_central_finite_difference_specs(
         "(float64[:,::1], int64[:,::1], int64, float64[:], boolean)"
     ),
     nopython=True,
-    # cache=True,
+    cache=True,
 )
 def _dot_cbr_finite_difference_matrix_with_diagonal(
     data: NDArray[np.float64],
@@ -317,7 +317,7 @@ def _dot_cbr_finite_difference_matrix_with_diagonal(
     "Tuple((int64, int64, int64, int64))(int64, int64, int64, int64)",
     nopython=True,
     inline="always",
-    # cache=True,
+    cache=True,
 )
 def _get_dot_overlap_indices(
     row_index_from: int,
@@ -341,7 +341,7 @@ def _get_dot_overlap_indices(
     "float64[:,::1](float64[:,::1], int64[:,::1], int64)",
     nopython=True,
     # parallel=True,
-    # cache=True,
+    cache=True,
 )
 def _square_cbr_finite_difference_matrix(
     data: NDArray[np.float64],
@@ -349,7 +349,7 @@ def _square_cbr_finite_difference_matrix(
     order: Literal[2, 4],
 ) -> NDArray[np.float64]:
     """
-    Computes the squared central finite difference matrix ``A.T @ A`` from the finite
+    Computes the squared central finite difference matrix ``A @ A.T`` from the finite
     difference matrix ``A``.
     Here, ``A`` can either be the finite difference matrix ``D`` or its transpose
     ``D.T``.
@@ -375,13 +375,13 @@ def _square_cbr_finite_difference_matrix(
     Returns
     -------
     squared_data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
-        The matrix ``A.T @  A`` in a vertically flipped LAPACK lower symmetric banded
+        The matrix ``A @ A.T`` in a vertically flipped LAPACK lower symmetric banded
         format.
         Please refer to the Notes section for details.
 
     Notes
     -----
-    For difference order 2, the symmetric squared matrix ``D.T @ D`` that looks like the
+    For difference order 2, the symmetric squared matrix ``D @ D.T`` that looks like the
     following in its dense form
 
     ```python
@@ -472,9 +472,134 @@ def _square_cbr_finite_difference_matrix(
     return squared_data
 
 
+@jit(
+    "Tuple((float64[:,::1], int64, int64))(float64[:,::1], int64)",
+    nopython=True,
+    cache=True,
+)
+def _convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage(
+    squared_data: NDArray[np.float64],
+    order: Literal[2, 4],
+) -> Tuple[NDArray[np.float64], int, int]:
+    """
+    Converts the squared central finite difference matrix ``A @ A.T`` as returned
+    by the function :func:`_square_cbr_finite_difference_matrix` to the banded storage
+    format expected by LAPACK's banded LU decomposition ``dgbtrf``.
+
+    Please refer to the Notes section for details.
+
+    Parameters
+    ----------
+    squared_data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
+        The matrix ``A @  A.T`` in a vertically flipped LAPACK lower symmetric banded
+        format.
+    order : {``2``, ``4``}
+        The order of the finite difference matrix ``A``.
+
+    Returns
+    -------
+    lapack_banded_data : :obj:`numpy.ndarray` of shape (3 * order + 1, num_points) and dtype ``numpy.float64``
+        The squared matrix ``A @ A.T`` in the LAPACK banded storage format.
+        Please refer to the Notes section for details.
+    num_sub_diagonals, num_super_diagonals : :obj:`int`
+        The number of sub- and super-diagonals in the banded storage format,
+        respectively.
+
+    Notes
+    -----
+    The squared matrix ``A @ A.T`` as returned by the function
+    :func:`_square_cbr_finite_difference_matrix` looks like the following
+
+    ```python
+    np.array(
+        [
+            [a00, a01, a02],
+            [a11, a12, a13],
+            [a22, a23, a24],
+            [a33, a34,   x],
+            [a44,   x,   x],
+        ]
+    )
+    ```
+
+    where the entries filled with ``x`` are allocated in memory but not used.
+
+    Its corresponding dense matrix would look like
+
+    ```python
+    np.array(
+        [
+            [a00, a01, a02,   0,   0],
+            [a01, a11, a12, a13,   0],
+            [a02, a12, a22, a23, a24],
+            [  0, a13, a23, a33, a34],
+            [  0,   0, a24, a34, a44],
+        ]
+    )
+    ```
+
+    For the conversion to the band storage format expected by LAPACK's banded LU
+    decomposition ``dgbtrf``, the input needs to be reshaped and mirrored to give
+
+    ```python
+    np.array(
+        [
+            [   x,   x,   x,   x,   x],
+            [   x,   x,   x,   x,   x],
+            [   x,   x, a02, a13, a24],
+            [   x, a01, a12, a23, a34],
+            [ a00, a11, a22, a33, a44],
+            [ a01, a12, a23, a34,   x],
+            [ a02, a13, a24,   x,   x],
+        ]
+    )
+    ```
+
+    where the leading rows that are all filled with ``x`` are required as extra
+    workspace for the pivoting of the LU decomposition. There will be one such row for
+    each sub-diagonal of the matrix.
+
+    So, in the particular case of an ``order``-th order finite difference matrix, there
+    will be ``order`` sub-diagonals, 1 main diagonal, and ``order`` super-diagonals,
+    which leaves in total ``3 * order + 1`` rows for the banded storage.
+
+    """  # noqa: E501
+
+    lapack_banded_data = np.empty(
+        shape=(3 * order + 1, squared_data.shape[0]),
+        dtype=np.float64,
+    )
+
+    # the main diagonal can be filled straight away
+    num_points = squared_data.shape[0]
+    main_diagonal_index = 2 * order
+    lapack_banded_data[main_diagonal_index, :] = squared_data[:, 0].copy()
+
+    # the sub- and super-diagonals are filled simultaneously
+    for column_index in range(1, squared_data.shape[1]):
+        values = squared_data[0 : num_points - column_index, column_index].copy()
+
+        # super-diagonal
+        lapack_banded_data[
+            main_diagonal_index - column_index, column_index:num_points
+        ] = values
+
+        # sub-diagonal
+        lapack_banded_data[
+            main_diagonal_index + column_index, 0 : num_points - column_index
+        ] = values
+
+    return lapack_banded_data, order, order
+
+
 if __name__ == "__main__":
 
-    from time import perf_counter_ns
+    from scipy.linalg import solve_banded
+
+    NUM_POINTS = 10
+    ORDER = 4
+
+    np.random.seed(0)
 
     def convert_to_dense(data, indices, num_points):
         dense_matrix = np.zeros(
@@ -489,94 +614,56 @@ if __name__ == "__main__":
 
         return dense_matrix
 
-    num_points = 10_000
-    order = 4
-
     data, indices = _make_central_finite_difference_specs(
-        num_points=num_points,
-        order=order,
-        transpose=False,
-    )
-
-    start_time = perf_counter_ns()
-    data, indices = _make_central_finite_difference_specs(
-        num_points=num_points,
-        order=order,
-        transpose=False,
-    )
-    stop_time = perf_counter_ns()
-
-    print(f"Took {(1e-3*(stop_time - start_time)):.0f} µs to generate the specs.")
-
-    dense_matrix = convert_to_dense(data, indices, num_points)
-
-    dataT, indicesT = _make_central_finite_difference_specs(
-        num_points=num_points,
-        order=order,
+        num_points=NUM_POINTS,
+        order=ORDER,
         transpose=True,
     )
 
-    dense_matrixT = convert_to_dense(dataT, indicesT, num_points)
-
-    assert np.allclose(dense_matrix.T, dense_matrixT)
-
-    np.random.seed(42)
-    weights = np.random.rand(num_points)
-
-    weighted_data, indices = _dot_cbr_finite_difference_matrix_with_diagonal(
-        data=data,
-        indices=indices,
-        order=order,
-        diagonal=weights,
+    data, indices = _dot_cbr_finite_difference_matrix_with_diagonal(
+        data,
+        indices,
+        ORDER,
+        np.random.randn(NUM_POINTS),
         multiply_left=False,
     )
 
-    start_time = perf_counter_ns()
-    weighted_data, indices = _dot_cbr_finite_difference_matrix_with_diagonal(
-        data=data,
-        indices=indices,
-        order=order,
-        diagonal=weights,
-        multiply_left=False,
-    )
-    stop_time = perf_counter_ns()
+    dense_matrix = convert_to_dense(data, indices, NUM_POINTS)
 
-    print(f"Took {(1e-3*(stop_time - start_time)):.0f} µs to apply the weights.")
+    print(dense_matrix, end="\n\n")
 
-    dense_matrix_weighted = convert_to_dense(weighted_data, indices, num_points)
-
-    assert np.allclose(dense_matrix_weighted, dense_matrix * weights[np.newaxis, :])
-    print("passed")
-
-    weighted_data, indices = _dot_cbr_finite_difference_matrix_with_diagonal(
-        data=data,
-        indices=indices,
-        order=order,
-        diagonal=weights,
-        multiply_left=True,
+    squared_data = _square_cbr_finite_difference_matrix(
+        data,
+        indices,
+        ORDER,
     )
 
-    dense_matrix_weighted = convert_to_dense(weighted_data, indices, num_points)
+    print(squared_data, end="\n\n")
 
-    assert np.allclose(dense_matrix_weighted, dense_matrix * weights[:, np.newaxis])
-    print("passed")
+    print(dense_matrix @ dense_matrix.T, end="\n\n")
 
-    test = _square_cbr_finite_difference_matrix(
-        data=data,
-        indices=indices,
-        order=order,
+    lapack_banded_data, num_sub_diagonals, num_super_diagonals = (
+        _convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage(
+            squared_data,
+            ORDER,
+        )
     )
 
-    start_time = perf_counter_ns()
-    test = _square_cbr_finite_difference_matrix(
-        data=data,
-        indices=indices,
-        order=order,
-    )
-    stop_time = perf_counter_ns()
+    lapack_banded_data = lapack_banded_data[ORDER::, ::]
+    lapack_banded_data[ORDER, ::] += 20.0
 
-    print(
-        f"Took {(1e-3*(stop_time - start_time)):.0f} µs to compute the squared matrix."
+    print(lapack_banded_data, end="\n\n")
+
+    b = np.random.randn(NUM_POINTS)
+
+    x1 = solve_banded(
+        (num_sub_diagonals, num_super_diagonals),
+        lapack_banded_data,
+        b,
     )
 
-    print(test)
+    dense_data_square = dense_matrix @ dense_matrix.T + 20.0 * np.eye(NUM_POINTS)
+
+    x2 = np.linalg.solve(dense_data_square, b)
+
+    assert np.allclose(x1, x2)
