@@ -8,6 +8,59 @@ for the Whittaker-Henderson smoother, more specifically the penalty matrix
 - ``D`` is a central finite difference matrix
 - ``Q`` is a diagonal matrix with the weights of the data points
 
+It heavily relies on a hybrid format between the sparse CSR format and the LAPACK
+banded format, named CBR format (compressed banded row).
+
+As an example, the banded matrix
+
+```python
+np.array(
+    [
+        [a00, a01, a02,   0,   0],
+        [a10, a11, a12, a13,   0],
+        [  0, a21, a22, a23, a24],
+        [  0,   0, a32, a33, a34],
+        [  0,   0,   0, a43, a44],
+    ]
+)
+```
+
+that consists of 4 diagonals (1 sub-, 1 main-, and 2 super-diagonals) would be stored
+in the CBR format as
+
+```python
+data = np.array(                    indices = np.array(
+    [                                   [
+        [a00, a01, a02,   x],               [0, 3],  # for the slice slice(0, 3)
+        [a10, a11, a12, a13],               [0, 4],
+        [a21, a22, a23, a24],               [1, 5],
+        [a32, a33, a34,   x],               [2, 5],
+        [a43, a44,   x,   x],               [3, 5],
+    ]                                   ]
+)                                   )
+```
+
+where the entries filled with ``x`` allocated in memory but not used.
+
+So basically, each row is defined by the non-zero entries and the corresponding column
+indices in the dense matrix. Since non-zero entries of a banded matrix are always
+consecutive for each row, it is sufficient to store 2 indices rather than the specific
+one-by-one index storage applied in the CSR format.
+
+The respective dense matrix can be reconstructed as follows:
+
+```python
+dense_matrix = np.zeros(
+    shape=(data.shape[0], data.shape[0]),
+    dtype=np.float64,
+)
+
+for row_index, (row_data, row_indices) in enumerate(zip(data, indices)):
+    index_from, index_to = row_indices
+    num_elements = index_to - index_from
+    dense_matrix[row_index, index_from:index_to] = row_data[0:num_elements]
+```
+
 """
 
 # === Imports ===
@@ -24,19 +77,22 @@ from pyscopee._utils import jit
 
 
 @jit(
-    "Tuple((float64[:,::1], int64[:,::1]))(int64, int64)",
+    "Tuple((float64[:,::1], int64[:,::1]))(int64, int64, boolean)",
     nopython=True,
     # cache=True,
 )
-def _make_transposed_central_finite_difference_specs(
+def _make_central_finite_difference_specs(
     num_points: int,
     order: Literal[2, 4],
+    transpose: bool,
 ) -> Tuple[NDArray[np.float64], NDArray[np.int64]]:
     """
-    Generates the specifications for a transposed square central finite difference
-    matrix ``D.T`` in a hybrid format between the sparse CSR format and the LAPACK
-    banded format.
+    Generates the CBR-specifications for a square central finite difference
+    matrix ``D`` or its transpose ``D.T``.
     A repeating boundary condition is assumed.
+
+    For further details on the CBR format, please refer to the global documentation of
+    this module.
 
     Parameters
     ----------
@@ -44,78 +100,20 @@ def _make_transposed_central_finite_difference_specs(
         The number of data points.
     order : {``2``, ``4``}
         The order of the finite difference matrix.
+    transpose : :obj:`bool`
+        Whether the transposed matrix ``D.T`` (``True``) or the original matrix ``D``
+        (``False``) should be generated.
 
     Returns
     -------
     data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
         The non-zero entries of the finite difference matrix vertically stacked as
         one row for each row of the corresponding dense matrix.
-        Please refer to the Notes section for details.
     indices : :obj:`numpy.ndarray` of shape (num_points, 2) and dtype ``numpy.int64``
         The column indices for the non-zero entries in ``data`` vertically stacked as
         one row for each row of the corresponding dense matrix.
         Its first and second column correspond to the ``start`` and ``stop`` of the
         ``slice(start, stop)``, respectively.
-        Please refer to the Notes section for details.
-
-    Notes
-    -----
-    Given that it fits into memory, the transposed dense matrix can be reconstructed as
-    follows:
-
-    ```python
-    transposed_dense_matrix = np.zeros(
-        shape=(num_points, num_points),
-        dtype=np.float64,
-    )
-
-    for row_index, (row_data, row_indices) in enumerate(zip(data, indices)):
-        dense_index_from, dense_index_to = row_indices
-        num_elements = index_to - index_from
-        transposed_dense_matrix[row_index, dense_index_from:dense_index_to] = (
-            row_data[0:num_elements]
-        )
-    ```
-
-    So, the transposed dense matrix
-
-    ```python
-    np.array(
-        [
-            [-1, 1, 0, 0, 0],
-            [1, -2, 1, 0, 0],
-            [0, 1, -2, 1, 0],
-            [0, 0, 1, -2, 1],
-            [0, 0, 0, 1, -1],
-        ]
-    )
-    ```
-
-    would be stored as
-
-    ```python
-    data = np.array(
-        [
-            [-1, 1, x],
-            [1, -2, 1],
-            [1, -2, 1],
-            [1, -2, 1],
-            [1, -1, x],
-        ]
-    )
-
-    indices = np.array(
-        [
-            [0, 2],
-            [0, 3],
-            [1, 4],
-            [2, 5],
-            [3, 5],
-        ]
-    )
-    ```
-
-    where the entries filled with ``x`` are not used.
 
     """  # noqa: E501
 
@@ -132,6 +130,8 @@ def _make_transposed_central_finite_difference_specs(
 
     # the coefficients are extracted and the leading and trailing rows are already
     # pre-filled based on the difference order
+    # NOTE: for order 2 the matrix is symmetric so the transpose is the same as the
+    #       original matrix
     if order == 2:
         # leading row with repeating boundary condition
         data[0, 0] = -1.0
@@ -150,17 +150,25 @@ def _make_transposed_central_finite_difference_specs(
         # finally, the central coefficients are obtained
         central_coefficients = np.array([1.0, -2.0, 1.0], dtype=np.float64)
 
+    # NOTE: for order 4 there is only 2 entries in the leading and trailing rows
+    #       that need to be interchanged respectively (denoted by ``flip_value_1`` and
+    #       ``flip_value_2`` here)
     else:
+        flip_value_1 = -4.0
+        flip_value_2 = -3.0
+        if transpose:
+            flip_value_1, flip_value_2 = flip_value_2, flip_value_1
+
         # first leading row with repeating boundary condition
         data[0, 0] = 3.0
-        data[0, 1] = -3.0
+        data[0, 1] = flip_value_1
         data[0, 2] = 1.0
 
         indices[0, 0] = 0
         indices[0, 1] = 3
 
         # second leading row with repeating boundary condition
-        data[1, 0] = -4.0
+        data[1, 0] = flip_value_2
         data[1, 1] = 6.0
         data[1, 2] = -4.0
         data[1, 3] = 1.0
@@ -172,14 +180,14 @@ def _make_transposed_central_finite_difference_specs(
         data[num_points - 2, 0] = 1.0
         data[num_points - 2, 1] = -4.0
         data[num_points - 2, 2] = 6.0
-        data[num_points - 2, 3] = -4.0
+        data[num_points - 2, 3] = flip_value_2
 
         indices[num_points - 2, 0] = num_points - 4
         indices[num_points - 2, 1] = num_points
 
         # last trailing row with repeating boundary condition
         data[num_points - 1, 0] = 1.0
-        data[num_points - 1, 1] = -3.0
+        data[num_points - 1, 1] = flip_value_1
         data[num_points - 1, 2] = 3.0
 
         indices[num_points - 1, 0] = num_points - 3
@@ -205,30 +213,39 @@ def _make_transposed_central_finite_difference_specs(
     return data, indices
 
 
-# @jit(
-#     "Tuple((float64[:,::1], int64[:,::1]))(float64[:,::1], int64[:,::1], int64, float64[:])",
-#     nopython=True,
-#     # cache=True,
-# )
-def _right_apply_weights_central_finite_difference_matrix(
+@jit(
+    (
+        "Tuple((float64[:,::1], int64[:,::1]))"
+        "(float64[:,::1], int64[:,::1], int64, float64[:], boolean)"
+    ),
+    nopython=True,
+    # cache=True,
+)
+def _dot_cbr_finite_difference_matrix_with_diagonal(
     data: NDArray[np.float64],
     indices: NDArray[np.int64],
     order: Literal[2, 4],
-    weights: NDArray[np.float64],
+    diagonal: NDArray[np.float64],
+    multiply_left: bool,
 ) -> Tuple[NDArray[np.float64], NDArray[np.int64]]:
     """
-    Applies the weights to the non-zero entries of the transposed central finite
-    difference matrix ``D.T`` to compute the matrix ``D.T @ Q`` where ``Q`` is a
-    diagonal matrix with the weights of the data points.
+    Computes the matrix product of the finite difference matrix ``A`` with a diagonal
+    matrix ``Q`` as either ``Q @ A`` (left multiplication) or ``A @ Q``
+    (right multiplication).
+    Here, ``A`` can either be the finite difference matrix ``D`` or its transpose
+    ``D.T``.
 
-    For the matrix specifications, please refer to the documentation of
-    :func:`_make_transposed_central_finite_difference_specs`.
+    ``A`` is stored in the CBR format (compressed banded row) and ``Q`` is stored as a
+    1D vector with its main diagonal entries.
+
+    For further details on the CBR format, please refer to the global documentation of
+    this module.
 
     Parameters
     ----------
     data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
-        The non-zero entries of the transposed finite difference matrix vertically
-        stacked as one row for each row of the corresponding dense matrix.
+        The non-zero entries of the finite difference matrix ``A`` vertically stacked as
+        one row for each row of the corresponding dense matrix.
     indices : :obj:`numpy.ndarray` of shape (num_points, 2) and dtype ``numpy.int64``
         The column indices for the non-zero entries in ``data`` vertically stacked as
         one row for each row of the corresponding dense matrix.
@@ -236,18 +253,33 @@ def _right_apply_weights_central_finite_difference_matrix(
         ``slice(start, stop)``, respectively.
     order : {``2``, ``4``}
         The order of the finite difference matrix.
-    weights : :obj:`numpy.ndarray` of shape (num_points,) and dtype ``numpy.float64``
-        The weights of the data points.
+    diagonal : :obj:`numpy.ndarray` of shape (num_points,) and dtype ``numpy.float64``
+        The main diagonal of the diagonal matrix ``Q``.
+    multiply_left : :obj:`bool`
+        Whether the finite difference matrix ``A`` should be multiplied as ``Q @ A``
+        (``True``) or ``A @ Q`` (``False``).
+        For the CBR format, the left multiplication is way faster than the right
+        multiplication.
 
     Returns
     -------
-    weighted_data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
-        The equivalent to ``data`` with the weights applied.
+    new_data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
+        The equivalent to ``data`` for the matrix product ``Q @ A`` or ``A @ Q``.
     indices : :obj:`numpy.ndarray` of shape (num_points, 2) and dtype ``numpy.int64``
         The same as ``indices`` which is not changed when weights are applied.
 
     """  # noqa: E501
 
+    # the left multiplication allows for an early exit because it is a simple
+    # column-wise multiplication
+    if multiply_left:
+        return (
+            data * diagonal[::, np.newaxis],
+            indices,
+        )
+
+    # the right multiplication is more complicated because different weights are
+    # accessed for each row
     weighted_data = np.empty_like(data)
 
     # the leading ``order // 2`` rows need to be treated separately
@@ -257,7 +289,7 @@ def _right_apply_weights_central_finite_difference_matrix(
         index_from, index_to = indices[row_index, ::]
         num_elements = index_to - index_from
         weighted_data[row_index, 0:num_elements] = (
-            weights[0:num_elements] * data[row_index, 0:num_elements]
+            diagonal[0:num_elements] * data[row_index, 0:num_elements]
         )
 
     # for the central rows, a sliding window stride trick can be applied for very
@@ -265,7 +297,7 @@ def _right_apply_weights_central_finite_difference_matrix(
     weighted_data[num_leading_rows : num_points - num_leading_rows, ::] = data[
         num_leading_rows : num_points - num_leading_rows, ::
     ] * np.lib.stride_tricks.sliding_window_view(
-        weights,
+        diagonal,
         window_shape=(order + 1,),
     )
 
@@ -274,7 +306,7 @@ def _right_apply_weights_central_finite_difference_matrix(
         index_from, index_to = indices[row_index, ::]
         num_elements = index_to - index_from
         weighted_data[row_index, 0:num_elements] = (
-            weights[num_points - num_elements : num_points]
+            diagonal[num_points - num_elements : num_points]
             * data[row_index, 0:num_elements]
         )
 
@@ -311,23 +343,27 @@ def _get_dot_overlap_indices(
     # parallel=True,
     # cache=True,
 )
-def _square_transposed_central_finite_difference_matrix(
+def _square_cbr_finite_difference_matrix(
     data: NDArray[np.float64],
     indices: NDArray[np.int64],
     order: Literal[2, 4],
 ) -> NDArray[np.float64]:
     """
-    Computes the squared central finite difference matrix ``D.T @ D`` from the
-    specifications of the transposed central finite difference matrix ``D.T``.
+    Computes the squared central finite difference matrix ``A.T @ A`` from the finite
+    difference matrix ``A``.
+    Here, ``A`` can either be the finite difference matrix ``D`` or its transpose
+    ``D.T``.
 
-    For the matrix specifications, please refer to the documentation of
-    :func:`_make_transposed_central_finite_difference_specs`.
+    ``A`` is stored in the CBR format (compressed banded row).
+
+    For further details on the CBR format, please refer to the global documentation of
+    this module.
 
     Parameters
     ----------
     data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
-        The non-zero entries of the transposed finite difference matrix vertically
-        stacked as one row for each row of the corresponding dense matrix.
+        The non-zero entries of the finite difference matrix ``A`` vertically stacked as
+        one row for each row of the corresponding dense matrix.
     indices : :obj:`numpy.ndarray` of shape (num_points, 2) and dtype ``numpy.int64``
         The column indices for the non-zero entries in ``data`` vertically stacked as
         one row for each row of the corresponding dense matrix.
@@ -339,14 +375,14 @@ def _square_transposed_central_finite_difference_matrix(
     Returns
     -------
     squared_data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
-        The matrix ``D.T @  D`` in a vertically flipped LAPACK lower symmetric banded
+        The matrix ``A.T @  A`` in a vertically flipped LAPACK lower symmetric banded
         format.
         Please refer to the Notes section for details.
 
     Notes
     -----
-    For difference order 2, the symmetric squared matrix that looks like the following
-    in its dense form
+    For difference order 2, the symmetric squared matrix ``D.T @ D`` that looks like the
+    following in its dense form
 
     ```python
     np.array(
@@ -440,77 +476,99 @@ if __name__ == "__main__":
 
     from time import perf_counter_ns
 
-    num_points = 10_000
-    order = 2
+    def convert_to_dense(data, indices, num_points):
+        dense_matrix = np.zeros(
+            shape=(num_points, num_points),
+            dtype=np.float64,
+        )
 
-    data, indices = _make_transposed_central_finite_difference_specs(
+        for row_index, (row_data, row_indices) in enumerate(zip(data, indices)):
+            index_from, index_to = row_indices
+            num_elements = index_to - index_from
+            dense_matrix[row_index, index_from:index_to] = row_data[0:num_elements]
+
+        return dense_matrix
+
+    num_points = 10_000
+    order = 4
+
+    data, indices = _make_central_finite_difference_specs(
         num_points=num_points,
         order=order,
+        transpose=False,
     )
 
     start_time = perf_counter_ns()
-    data, indices = _make_transposed_central_finite_difference_specs(
+    data, indices = _make_central_finite_difference_specs(
         num_points=num_points,
         order=order,
+        transpose=False,
     )
     stop_time = perf_counter_ns()
 
     print(f"Took {(1e-3*(stop_time - start_time)):.0f} µs to generate the specs.")
 
-    dense_matrix = np.zeros(
-        shape=(num_points, num_points),
-        dtype=np.float64,
+    dense_matrix = convert_to_dense(data, indices, num_points)
+
+    dataT, indicesT = _make_central_finite_difference_specs(
+        num_points=num_points,
+        order=order,
+        transpose=True,
     )
 
-    for row_index, (row_data, row_indices) in enumerate(zip(data, indices)):
-        index_from, index_to = row_indices
-        num_elements = index_to - index_from
-        dense_matrix[row_index, index_from:index_to] = row_data[0:num_elements]
+    dense_matrixT = convert_to_dense(dataT, indicesT, num_points)
 
-    print("both close?", np.allclose(dense_matrix.T, dense_matrix))
+    assert np.allclose(dense_matrix.T, dense_matrixT)
 
     np.random.seed(42)
     weights = np.random.rand(num_points)
 
-    weighted_data, indices = _right_apply_weights_central_finite_difference_matrix(
+    weighted_data, indices = _dot_cbr_finite_difference_matrix_with_diagonal(
         data=data,
         indices=indices,
         order=order,
-        weights=weights,
+        diagonal=weights,
+        multiply_left=False,
     )
 
     start_time = perf_counter_ns()
-    weighted_data, indices = _right_apply_weights_central_finite_difference_matrix(
+    weighted_data, indices = _dot_cbr_finite_difference_matrix_with_diagonal(
         data=data,
         indices=indices,
         order=order,
-        weights=weights,
+        diagonal=weights,
+        multiply_left=False,
     )
     stop_time = perf_counter_ns()
 
     print(f"Took {(1e-3*(stop_time - start_time)):.0f} µs to apply the weights.")
 
-    dense_matrix_weighted = np.zeros(
-        shape=(num_points, num_points),
-        dtype=np.float64,
-    )
-
-    for row_index, (row_data, row_indices) in enumerate(zip(weighted_data, indices)):
-        index_from, index_to = row_indices
-        num_elements = index_to - index_from
-        dense_matrix_weighted[row_index, index_from:index_to] = row_data[0:num_elements]
+    dense_matrix_weighted = convert_to_dense(weighted_data, indices, num_points)
 
     assert np.allclose(dense_matrix_weighted, dense_matrix * weights[np.newaxis, :])
     print("passed")
 
-    test = _square_transposed_central_finite_difference_matrix(
+    weighted_data, indices = _dot_cbr_finite_difference_matrix_with_diagonal(
+        data=data,
+        indices=indices,
+        order=order,
+        diagonal=weights,
+        multiply_left=True,
+    )
+
+    dense_matrix_weighted = convert_to_dense(weighted_data, indices, num_points)
+
+    assert np.allclose(dense_matrix_weighted, dense_matrix * weights[:, np.newaxis])
+    print("passed")
+
+    test = _square_cbr_finite_difference_matrix(
         data=data,
         indices=indices,
         order=order,
     )
 
     start_time = perf_counter_ns()
-    test = _square_transposed_central_finite_difference_matrix(
+    test = _square_cbr_finite_difference_matrix(
         data=data,
         indices=indices,
         order=order,
