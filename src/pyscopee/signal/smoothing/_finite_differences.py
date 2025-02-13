@@ -205,6 +205,82 @@ def _make_transposed_central_finite_difference_specs(
     return data, indices
 
 
+# @jit(
+#     "Tuple((float64[:,::1], int64[:,::1]))(float64[:,::1], int64[:,::1], int64, float64[:])",
+#     nopython=True,
+#     # cache=True,
+# )
+def _right_apply_weights_central_finite_difference_matrix(
+    data: NDArray[np.float64],
+    indices: NDArray[np.int64],
+    order: Literal[2, 4],
+    weights: NDArray[np.float64],
+) -> Tuple[NDArray[np.float64], NDArray[np.int64]]:
+    """
+    Applies the weights to the non-zero entries of the transposed central finite
+    difference matrix ``D.T`` to compute the matrix ``D.T @ Q`` where ``Q`` is a
+    diagonal matrix with the weights of the data points.
+
+    For the matrix specifications, please refer to the documentation of
+    :func:`_make_transposed_central_finite_difference_specs`.
+
+    Parameters
+    ----------
+    data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
+        The non-zero entries of the transposed finite difference matrix vertically
+        stacked as one row for each row of the corresponding dense matrix.
+    indices : :obj:`numpy.ndarray` of shape (num_points, 2) and dtype ``numpy.int64``
+        The column indices for the non-zero entries in ``data`` vertically stacked as
+        one row for each row of the corresponding dense matrix.
+        Its first and second column correspond to the ``start`` and ``stop`` of the
+        ``slice(start, stop)``, respectively.
+    order : {``2``, ``4``}
+        The order of the finite difference matrix.
+    weights : :obj:`numpy.ndarray` of shape (num_points,) and dtype ``numpy.float64``
+        The weights of the data points.
+
+    Returns
+    -------
+    weighted_data : :obj:`numpy.ndarray` of shape (num_points, order + 1) and dtype ``numpy.float64``
+        The equivalent to ``data`` with the weights applied.
+    indices : :obj:`numpy.ndarray` of shape (num_points, 2) and dtype ``numpy.int64``
+        The same as ``indices`` which is not changed when weights are applied.
+
+    """  # noqa: E501
+
+    weighted_data = np.empty_like(data)
+
+    # the leading ``order // 2`` rows need to be treated separately
+    num_points = data.shape[0]
+    num_leading_rows = order // 2
+    for row_index in range(0, num_leading_rows):
+        index_from, index_to = indices[row_index, ::]
+        num_elements = index_to - index_from
+        weighted_data[row_index, 0:num_elements] = (
+            weights[0:num_elements] * data[row_index, 0:num_elements]
+        )
+
+    # for the central rows, a sliding window stride trick can be applied for very
+    # fast computation
+    weighted_data[num_leading_rows : num_points - num_leading_rows, ::] = data[
+        num_leading_rows : num_points - num_leading_rows, ::
+    ] * np.lib.stride_tricks.sliding_window_view(
+        weights,
+        window_shape=(order + 1,),
+    )
+
+    # the trailing ``order // 2`` rows need to be treated separately
+    for row_index in range(num_points - num_leading_rows, num_points):
+        index_from, index_to = indices[row_index, ::]
+        num_elements = index_to - index_from
+        weighted_data[row_index, 0:num_elements] = (
+            weights[num_points - num_elements : num_points]
+            * data[row_index, 0:num_elements]
+        )
+
+    return weighted_data, indices
+
+
 @jit(
     "Tuple((int64, int64, int64, int64))(int64, int64, int64, int64)",
     nopython=True,
@@ -232,7 +308,7 @@ def _get_dot_overlap_indices(
 @jit(
     "float64[:,::1](float64[:,::1], int64[:,::1], int64)",
     nopython=True,
-    parallel=True,
+    # parallel=True,
     # cache=True,
 )
 def _square_transposed_central_finite_difference_matrix(
@@ -244,7 +320,7 @@ def _square_transposed_central_finite_difference_matrix(
     Computes the squared central finite difference matrix ``D.T @ D`` from the
     specifications of the transposed central finite difference matrix ``D.T``.
 
-    For the specifications, please refer to the documentation of
+    For the matrix specifications, please refer to the documentation of
     :func:`_make_transposed_central_finite_difference_specs`.
 
     Parameters
@@ -321,11 +397,9 @@ def _square_transposed_central_finite_difference_matrix(
     # each row (except for the last ``order`` rows)
     bandwidth = order + 1
 
-    # the squared data and indices are pre-allocated
-    squared_data = np.empty_like(data)
-
     # the matrix product is computed row by row for the upper triangular part only
     # due to symmetry
+    squared_data = np.empty_like(data)
     num_points = data.shape[0]
     for row_index in prange(0, num_points):
         dense_index_from, dense_index_to = indices[row_index, ::]
@@ -366,8 +440,8 @@ if __name__ == "__main__":
 
     from time import perf_counter_ns
 
-    num_points = 5
-    order = 4
+    num_points = 10_000
+    order = 2
 
     data, indices = _make_transposed_central_finite_difference_specs(
         num_points=num_points,
@@ -394,6 +468,40 @@ if __name__ == "__main__":
         dense_matrix[row_index, index_from:index_to] = row_data[0:num_elements]
 
     print("both close?", np.allclose(dense_matrix.T, dense_matrix))
+
+    np.random.seed(42)
+    weights = np.random.rand(num_points)
+
+    weighted_data, indices = _right_apply_weights_central_finite_difference_matrix(
+        data=data,
+        indices=indices,
+        order=order,
+        weights=weights,
+    )
+
+    start_time = perf_counter_ns()
+    weighted_data, indices = _right_apply_weights_central_finite_difference_matrix(
+        data=data,
+        indices=indices,
+        order=order,
+        weights=weights,
+    )
+    stop_time = perf_counter_ns()
+
+    print(f"Took {(1e-3*(stop_time - start_time)):.0f} µs to apply the weights.")
+
+    dense_matrix_weighted = np.zeros(
+        shape=(num_points, num_points),
+        dtype=np.float64,
+    )
+
+    for row_index, (row_data, row_indices) in enumerate(zip(weighted_data, indices)):
+        index_from, index_to = row_indices
+        num_elements = index_to - index_from
+        dense_matrix_weighted[row_index, index_from:index_to] = row_data[0:num_elements]
+
+    assert np.allclose(dense_matrix_weighted, dense_matrix * weights[np.newaxis, :])
+    print("passed")
 
     test = _square_transposed_central_finite_difference_matrix(
         data=data,
