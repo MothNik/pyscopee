@@ -70,6 +70,7 @@ __all__ = [
     "dot_cbr_finite_difference_matrix_with_diagonal",
     "square_cbr_finite_difference_matrix",
     "convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage",
+    "second_order_central_finite_differences",
 ]
 
 # === Imports ===
@@ -601,6 +602,52 @@ def convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage(
     return lapack_banded_data, order, order
 
 
+@jit(
+    "float64[::1](float64[::1], boolean)",
+    nopython=True,
+    cache=True,
+)
+def second_order_central_finite_differences(
+    x: np.ndarray,
+    transpose_d: bool,
+) -> np.ndarray:
+    """
+    Computes the second order central finite differences of a vector ``x`` as either
+    ``D @ x`` or ``D.T @ x`` where ``D`` is the second order central finite difference
+    matrix.
+    A repeating boundary condition is assumed.
+
+    Parameters
+    ----------
+    x : :obj:`numpy.ndarray` of shape (num_points,) and dtype ``numpy.float64``
+        The input vector.
+    transpose_d : :obj:`bool`
+        Whether the transposed matrix ``D.T`` (``True``) or the original matrix ``D``
+        (``False``) should be used.
+        This has no effect on the result because the matrix is symmetric.
+
+    Returns
+    -------
+    finite_differences : :obj:`numpy.ndarray` of shape (num_points,) and dtype ``numpy.float64``
+        The second order central finite differences of the input vector.
+
+    """  # noqa: E501
+
+    finite_differences = np.empty_like(x)
+
+    # the leading entry is treated separately
+    finite_differences[0] = x[1] - x[0]
+
+    # the central entries are computed
+    for index in range(1, x.size - 1):
+        finite_differences[index] = x[index - 1] - 2.0 * x[index] + x[index + 1]
+
+    # the trailing entry is treated separately
+    finite_differences[x.size - 1] = x[x.size - 2] - x[x.size - 1]
+
+    return finite_differences
+
+
 if __name__ == "__main__":
 
     from scipy.linalg import solve_banded
@@ -612,7 +659,7 @@ if __name__ == "__main__":
     )
 
     NUM_POINTS = 10
-    ORDER = 4
+    ORDER = 2
 
     np.random.seed(0)
 
@@ -633,6 +680,13 @@ if __name__ == "__main__":
         num_points=NUM_POINTS,
         order=ORDER,
         transpose=True,
+    )
+
+    dense_matrix = convert_to_dense(data, indices, NUM_POINTS)
+
+    vect = np.random.randn(NUM_POINTS)
+    assert np.allclose(
+        dense_matrix @ vect, second_order_central_finite_differences(vect, True)
     )
 
     data, indices = dot_cbr_finite_difference_matrix_with_diagonal(
