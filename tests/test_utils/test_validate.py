@@ -1468,8 +1468,10 @@ def test_real_numeric_validation(
             None,
             None,
             TypeError(
-                "Expected 'value' to be a 1D Array-like of real numeric values, but "
-                "got a 1D Array-like with non-real numeric values."
+                # NOTE: the round parenthesis would cause a regex error
+                r"Expected 'value' to be a 1D Array-like of real numeric \(boolean "
+                r"excluded\) values, but got a 1D Array-like not meeting this "
+                r"requirement."
             ),
         ),
         (  # 77) a Python List of complex values
@@ -1478,8 +1480,10 @@ def test_real_numeric_validation(
             None,
             None,
             TypeError(
-                "Expected 'value' to be a 1D Array-like of real numeric values, but "
-                "got a 1D Array-like with non-real numeric values."
+                # NOTE: the round parenthesis would cause a regex error
+                r"Expected 'value' to be a 1D Array-like of real numeric \(boolean "
+                r"excluded\) values, but got a 1D Array-like not meeting this "
+                r"requirement."
             ),
         ),
         (  # 78) a Python Tuple of complex values
@@ -1488,8 +1492,10 @@ def test_real_numeric_validation(
             None,
             None,
             TypeError(
-                "Expected 'value' to be a 1D Array-like of real numeric values, but "
-                "got a 1D Array-like with non-real numeric values."
+                # NOTE: the round parenthesis would cause a regex error
+                r"Expected 'value' to be a 1D Array-like of real numeric \(boolean "
+                r"excluded\) values, but got a 1D Array-like not meeting this "
+                r"requirement."
             ),
         ),
         (  # 79) a Pandas Series of complex values
@@ -1498,8 +1504,10 @@ def test_real_numeric_validation(
             None,
             None,
             TypeError(
-                "Expected 'value' to be a 1D Array-like of real numeric values, but "
-                "got a 1D Array-like with non-real numeric values."
+                # NOTE: the round parenthesis would cause a regex error
+                r"Expected 'value' to be a 1D Array-like of real numeric \(boolean "
+                r"excluded\) values, but got a 1D Array-like not meeting this "
+                r"requirement."
             ),
         ),
     ],
