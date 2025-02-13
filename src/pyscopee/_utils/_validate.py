@@ -473,6 +473,7 @@ def get_validated_numeric_nd_array_like(
     dim: Literal[1, 2],
     shape_limits: List[Tuple[Optional[int], Optional[int]]],
     dtype_kind: NumPyDTypeKinds,
+    enforce_finite: bool,
     output_dtype: Optional[Type],
 ) -> np.ndarray:
     """
@@ -495,6 +496,9 @@ def get_validated_numeric_nd_array_like(
         The length of the list must be equal to ``dim``.
     dtype_kind : :obj:`NumPyDTypeKinds`
         The kind of NumPy data types for data type checking.
+    enforce_finite : :obj:`bool`
+        Whether to enforce that all entries are finite, i.e., not ``nan``, ``-inf``, or
+        ``inf`` (``True``) or not (``False``).
     output_dtype : :obj:`type` or ``None``, default=``None``
         The data type of the output NumPy Array.
         If ``None``, the data type is not changed.
@@ -584,6 +588,15 @@ def get_validated_numeric_nd_array_like(
             f"not meeting this requirement."
         )
 
+    # if finite values are enforced, the value is checked to contain only finite values
+    # NOTE: Python ``and`` evaluates the second argument lazily, i.e., if the first
+    #       argument is ``False``, the second argument is not even evaluated
+    if enforce_finite and not np.isfinite(value_array).all():
+        raise TypeError(
+            f"Expected '{name}' to contain only finite values, but got an Array with "
+            f"non-finite values."
+        )
+
     # if a new data type is provided, the value is converted to this data type
     if output_dtype is not None:
         if output_dtype != value_array.dtype:
@@ -603,6 +616,7 @@ def get_validated_real_numeric_1d_array_like(
     name: str,
     min_size: Optional[int] = None,
     max_size: Optional[int] = None,
+    enforce_finite: bool = False,
     output_dtype: Optional[Type] = None,
 ) -> np.ndarray:
     """
@@ -620,6 +634,9 @@ def get_validated_real_numeric_1d_array_like(
         The minimum and maximum allowed size of the 1D Array-like.
         If ``None``, the size is not checked against the respective bound.
         Arrays of size 0 will always be considered invalid.
+    enforce_finite : :obj:`bool`, default=``False``
+        Whether to enforce that all entries are finite, i.e., not ``nan``, ``-inf``, or
+        ``inf`` (``True``) or not (``False``).
     output_dtype : :obj:`type` or ``None``, default=``None``
         The data type of the output NumPy Array.
         If ``None``, the data type is not changed.
@@ -653,6 +670,7 @@ def get_validated_real_numeric_1d_array_like(
             (min_size, max_size),
         ],
         dtype_kind=NumPyDTypeKinds.REAL_NUMERIC_NO_BOOL,
+        enforce_finite=enforce_finite,
         output_dtype=output_dtype,
     )
 
@@ -664,6 +682,7 @@ def get_validated_real_numeric_2d_array_like(
     rows_max_num: Optional[int] = None,
     columns_min_num: Optional[int] = None,
     columns_max_num: Optional[int] = None,
+    enforce_finite: bool = False,
     output_dtype: Optional[Type] = None,
 ) -> np.ndarray:
     """
@@ -682,6 +701,9 @@ def get_validated_real_numeric_2d_array_like(
         If ``None``, the number of rows is not checked against the respective bound.
     columns_min_num, columns_max_num : :obj:`int` or ``None``, default=``None``
         Equivalent to ``rows_min_num`` and ``rows_max_num`` but for the columns.
+    enforce_finite : :obj:`bool`, default=``False``
+        Whether to enforce that all entries are finite, i.e., not ``nan``, ``-inf``, or
+        ``inf`` (``True``) or not (``False``).
     output_dtype : :obj:`type` or ``None``, default=``None``
         The data type of the output NumPy Array.
         If ``None``, the data type is not changed.
@@ -718,6 +740,7 @@ def get_validated_real_numeric_2d_array_like(
             (columns_min_num, columns_max_num),
         ],
         dtype_kind=NumPyDTypeKinds.REAL_NUMERIC_NO_BOOL,
+        enforce_finite=enforce_finite,
         output_dtype=output_dtype,
     )
 
