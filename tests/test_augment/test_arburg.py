@@ -344,8 +344,8 @@ def test_arburg_fails_on_too_small_segments() -> None:
     with pytest.raises(
         ValueError,
         match=(
-            "Expected 'xs-segment 0' to have a size between 2 and None, but got a size "
-            "of 1."
+            "Expected 'xs-segment 0' to have a size between 2 and None for axis 0, but "
+            "got a size of 1."
         ),
     ):
         arburg(
@@ -365,8 +365,8 @@ def test_arburg_fails_on_too_small_segments() -> None:
     with pytest.raises(
         ValueError,
         match=(
-            "Expected 'xs-segment 2' to have a size between 2 and None, but got a size "
-            "of 1."
+            "Expected 'xs-segment 2' to have a size between 2 and None for axis 0, but "
+            "got a size of 1."
         ),
     ):
         arburg(
