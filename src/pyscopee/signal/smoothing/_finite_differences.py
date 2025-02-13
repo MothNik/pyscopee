@@ -25,7 +25,7 @@ np.array(
 )
 ```
 
-that consists of 4 diagonals (1 sub-, 1 main-, and 2 super-diagonals) would be stored
+that consists of 4 diagonals (1 sub-, 1 main, and 2 super-diagonals) would be stored
 in the CBR format as
 
 ```python
@@ -63,6 +63,15 @@ for row_index, (row_data, row_indices) in enumerate(zip(data, indices)):
 
 """
 
+# === Setup ===
+
+__all__ = [
+    "make_central_finite_difference_specs",
+    "dot_cbr_finite_difference_matrix_with_diagonal",
+    "square_cbr_finite_difference_matrix",
+    "convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage",
+]
+
 # === Imports ===
 
 from typing import Literal, Tuple
@@ -71,7 +80,7 @@ import numpy as np
 from numba import prange
 from numpy.typing import NDArray
 
-from pyscopee._utils import jit
+from ..._utils import jit
 
 # === Functions ===
 
@@ -81,7 +90,7 @@ from pyscopee._utils import jit
     nopython=True,
     cache=True,
 )
-def _make_central_finite_difference_specs(
+def make_central_finite_difference_specs(
     num_points: int,
     order: Literal[2, 4],
     transpose: bool,
@@ -221,7 +230,7 @@ def _make_central_finite_difference_specs(
     nopython=True,
     cache=True,
 )
-def _dot_cbr_finite_difference_matrix_with_diagonal(
+def dot_cbr_finite_difference_matrix_with_diagonal(
     data: NDArray[np.float64],
     indices: NDArray[np.int64],
     order: Literal[2, 4],
@@ -343,7 +352,7 @@ def _get_dot_overlap_indices(
     # parallel=True,
     cache=True,
 )
-def _square_cbr_finite_difference_matrix(
+def square_cbr_finite_difference_matrix(
     data: NDArray[np.float64],
     indices: NDArray[np.int64],
     order: Literal[2, 4],
@@ -477,7 +486,7 @@ def _square_cbr_finite_difference_matrix(
     nopython=True,
     cache=True,
 )
-def _convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage(
+def convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage(
     squared_data: NDArray[np.float64],
     order: Literal[2, 4],
 ) -> Tuple[NDArray[np.float64], int, int]:
@@ -596,6 +605,12 @@ if __name__ == "__main__":
 
     from scipy.linalg import solve_banded
 
+    from pyscopee.signal.smoothing._banded_linalg import (
+        lu_banded,
+        lu_solve_banded,
+        slogdet_lu_banded,
+    )
+
     NUM_POINTS = 10
     ORDER = 4
 
@@ -614,13 +629,13 @@ if __name__ == "__main__":
 
         return dense_matrix
 
-    data, indices = _make_central_finite_difference_specs(
+    data, indices = make_central_finite_difference_specs(
         num_points=NUM_POINTS,
         order=ORDER,
         transpose=True,
     )
 
-    data, indices = _dot_cbr_finite_difference_matrix_with_diagonal(
+    data, indices = dot_cbr_finite_difference_matrix_with_diagonal(
         data,
         indices,
         ORDER,
@@ -632,7 +647,7 @@ if __name__ == "__main__":
 
     print(dense_matrix, end="\n\n")
 
-    squared_data = _square_cbr_finite_difference_matrix(
+    squared_data = square_cbr_finite_difference_matrix(
         data,
         indices,
         ORDER,
@@ -643,14 +658,13 @@ if __name__ == "__main__":
     print(dense_matrix @ dense_matrix.T, end="\n\n")
 
     lapack_banded_data, num_sub_diagonals, num_super_diagonals = (
-        _convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage(
+        convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage(
             squared_data,
             ORDER,
         )
     )
 
-    lapack_banded_data = lapack_banded_data[ORDER::, ::]
-    lapack_banded_data[ORDER, ::] += 20.0
+    lapack_banded_data[2 * ORDER, ::] += 20.0
 
     print(lapack_banded_data, end="\n\n")
 
@@ -658,12 +672,32 @@ if __name__ == "__main__":
 
     x1 = solve_banded(
         (num_sub_diagonals, num_super_diagonals),
-        lapack_banded_data,
+        lapack_banded_data[ORDER::, ::],
+        b,
+    )
+
+    banded_lu = lu_banded(
+        l_and_u=(num_sub_diagonals, num_super_diagonals),
+        ab=lapack_banded_data,
+        ab_has_added_workspace=True,
+        check_finite=False,
+    )
+
+    sloget1 = slogdet_lu_banded(
+        banded_lu,
+    )
+
+    x2 = lu_solve_banded(
+        banded_lu,
         b,
     )
 
     dense_data_square = dense_matrix @ dense_matrix.T + 20.0 * np.eye(NUM_POINTS)
+    sloget2 = np.linalg.slogdet(dense_data_square)
 
-    x2 = np.linalg.solve(dense_data_square, b)
+    x3 = np.linalg.solve(dense_data_square, b)
 
     assert np.allclose(x1, x2)
+    assert np.allclose(x1, x3)
+
+    print(sloget1, sloget2)
