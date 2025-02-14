@@ -24,7 +24,7 @@ from ..._utils import jit
 
 
 @jit(
-    "float64[:](float64[:], float64[:], int64, boolean)",
+    "float64[::1](float64[::1], float64[::1], int64, boolean)",
     nopython=True,
     cache=True,
 )
@@ -86,7 +86,7 @@ def predict_autoregressive_one_side(
 
     # for the left side, the output Array has to be flipped
     if is_left_side:
-        return np.flip(x_predicted[order:])
+        return np.ascontiguousarray(np.flip(x_predicted[order:]))
     else:
         return x_predicted[order:]
 
@@ -95,7 +95,7 @@ def predict_autoregressive_one_side(
 
 
 @jit(
-    "float64[:](float64[:,:], int64[:], int64, float64)",
+    "float64[::1](float64[::, ::1], int64[::1], int64, float64)",
     nopython=True,
     cache=True,
 )
@@ -232,7 +232,7 @@ def arburg_fast(
             # vector-vector products with the vector a directly
             x_view = np.ascontiguousarray(x[1 + iter_ord :: -1])
             delta_r_dot_a = -x_view * np.dot(x_view, a_view)
-            x_view = np.ascontiguousarray(x[num_elements - 2 - iter_ord : :])
+            x_view = x[num_elements - 2 - iter_ord : :]
             delta_r_dot_a -= x_view * np.dot(x_view, a_view)
 
             # the auxiliary vector g is updated
@@ -469,7 +469,7 @@ def ar_one_step_least_squares(
 
 
 @jit(
-    "float64[:](float64[:], float64[:, :], int64, int64, int64, int64)",
+    "float64[::1](float64[::1], float64[::, ::1], int64, int64, int64, int64)",
     nopython=True,
     cache=True,
 )
