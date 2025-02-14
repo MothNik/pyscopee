@@ -38,6 +38,7 @@ from .._utils import (
 
 # === Typing ===
 
+_Scalar = Union[int, float, complex, np.integer, np.floating, np.complexfloating]
 LAndUBandCounts = Union[Tuple[Integer, Integer], List[Integer]]
 BandedLUFactorization = namedtuple(
     "BandedLUFactorization",
@@ -48,6 +49,34 @@ BandedLUFactorization = namedtuple(
         "singular",
     ],
 )
+
+# === Auxiliary Functions ===
+
+
+def _is_data_linked(
+    arr: np.ndarray,
+    original: Union[_Scalar, ArrayLike],
+) -> bool:
+    """
+    Strictly checks for ``arr`` not sharing any data with ``original``, under the
+    assumption that ``arr = atleast_1d(original)`` followed by a potential type
+    conversion.
+    If ``arr`` is a view of ``original``, this function returns ``False``.
+
+    Was copied from the SciPy utility function ``scipy.linalg._misc._datacopied``, but
+    the name and the docstring were adapted to make them clearer. Besides, the check for
+    scalar ``original``s was added.
+
+    """
+
+    if np.isscalar(original):
+        return False
+    if arr is original:
+        return True
+    if not isinstance(original, np.ndarray) and hasattr(original, "__array__"):
+        return original.__array__().dtype is arr.dtype  # type: ignore
+
+    return arr.base is not None
 
 
 # === Banded LU decomposition ===
@@ -359,6 +388,10 @@ def lu_solve_banded(
         )
 
     # === Computation ===
+
+    # if b is not a view but a copy, it is allowed to be overwritten independently of
+    # the user's choice
+    overwrite_b = overwrite_b or not _is_data_linked(arr=b_internal, original=b)
 
     # now, the LAPACK-routine is called
     (gbtrs,) = lapack.get_lapack_funcs(("gbtrs",), (lub_factorization.lub, b_internal))
