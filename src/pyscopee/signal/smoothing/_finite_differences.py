@@ -652,7 +652,7 @@ if __name__ == "__main__":
 
     from scipy.linalg import solve_banded
 
-    from pyscopee.signal.smoothing._banded_linalg import (
+    from pyscopee.linalg._banded_linalg import (
         lu_banded,
         lu_solve_banded,
         slogdet_lu_banded,

@@ -1,5 +1,5 @@
 """
-Module :mod:`signal.smoothing._banded_linalg`
+Module :mod:`linalg._banded_linalg`
 
 This module provides interfaces to LAPACK-routines for banded matrices such as
 
@@ -29,7 +29,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from scipy.linalg import lapack
 
-from pyscopee._utils import (
+from .._utils import (
     Integer,
     NumPyDTypeKinds,
     get_validated_integer,

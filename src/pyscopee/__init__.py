@@ -9,7 +9,6 @@ A Python package for Spectroscopy in Python.
 
 import os as _os
 
-from . import augment, stats  # noqa: F401
 from ._utils import (  # noqa: F401
     Integer,
     RealNumeric,
