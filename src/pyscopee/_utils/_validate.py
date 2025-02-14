@@ -64,6 +64,7 @@ class NumPyDTypeKinds(str, Enum):
     REAL_NUMERIC = "biuf"
     REAL_NUMERIC_NO_BOOL = "iuf"
     INTEGER = "iu"
+    FLOAT_OR_COMPLEX = "fc"
 
     def to_error_message_str(self) -> str:
         return {
