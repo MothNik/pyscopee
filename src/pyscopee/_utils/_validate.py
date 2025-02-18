@@ -14,6 +14,7 @@ __all__ = [
     "get_validated_real_numeric_1d_array_like",
     "get_validated_real_numeric_2d_array_like",
     "isinstance_incl_none",
+    "validate_1d_array_is_sorted",
     "validate_1d_array_is_evenly_spaced",
 ]
 
@@ -319,7 +320,8 @@ def _get_validated_scalar(
 
 
 def isinstance_incl_none(
-    value: Any, types: Union[Type, Tuple[Optional[Type], ...], None]
+    value: Any,
+    types: Union[Type, Tuple[Optional[Type], ...], None],
 ) -> bool:
     """
     Checks if a value is an instance of one of the provided types including a check
@@ -746,6 +748,86 @@ def get_validated_real_numeric_2d_array_like(
     )
 
 
+def validate_1d_array_is_sorted(
+    value: np.ndarray,
+    name: str,
+    order: Literal["ascending", "descending", "both"] = "ascending",
+    strict: bool = True,
+) -> None:
+    """
+    Validates that a 1D Array is sorted in either (strictly) ascending and/or (strictly)
+    descending order.
+
+    Parameters
+    ----------
+    value : :obj:`numpy.ndarray` of shape (n, )
+        The 1D Array to validate.
+        It may not be empty.
+    name : :obj:`str`
+        The name of the value used for error messages.
+    order : {``"ascending"``, ``"descending"``, ``"both"``}, default=``"ascending"``
+        The order to check.
+    strict : :obj:`bool`, default=``True``
+        Whether to check for strict ordering (``True``) or not (``False``), i.e., if
+        subsequent values are allowed to be equal or not.
+
+    Raises
+    ------
+    TypeError
+        If ``value`` is not a NumPy Array.
+    ValueError
+        If ``value`` is not a 1D Array.
+    ValueError
+        If ``value`` is empty.
+    ValueError
+        If ``order`` is not one of the supported options.
+    ValueError
+        If ``value`` is not sorted in the specified order.
+
+    """
+
+    # first, the value is checked to be a 1D Array
+    if not isinstance(value, np.ndarray):
+        raise TypeError(
+            f"Expected '{name}' to be a NumPy Array, but got {type(value)}."
+        )
+
+    if value.ndim != 1:
+        raise ValueError(
+            f"Expected '{name}' to be a 1D Array, but got a {value.ndim}D Array."
+        )
+
+    # empty Arrays are considered invalid
+    if value.size < 1:
+        raise ValueError(f"Expected '{name}' to be a non-empty Array.")
+
+    # then, the value is checked to be sorted in the specified order
+    order = order.lower()  # type: ignore
+    if order not in {"ascending", "descending", "both"}:
+        raise ValueError(
+            f"Expected 'order' to be one of 'ascending', 'descending', or 'both', but "
+            f"got '{order}'."
+        )
+
+    if order in {"ascending", "both"}:
+        comparison_operator = operator.lt if strict else operator.le
+        if (comparison_operator(value[0:-1], value[1:])).all():
+            return
+
+    if order in {"descending", "both"}:
+        comparison_operator = operator.gt if strict else operator.ge
+        if (comparison_operator(value[0:-1], value[1:])).all():
+            return
+
+    strict_str = "strict" if strict else ""
+    order_str = order if order != "both" else "ascending or descending"
+
+    raise ValueError(
+        f"Expected '{name}' to be sorted in {strict_str} {order_str} order, but got an "
+        f"Array that is not sorted in this way."
+    )
+
+
 def validate_1d_array_is_evenly_spaced(
     value: np.ndarray,
     name: str,
@@ -772,7 +854,9 @@ def validate_1d_array_is_evenly_spaced(
     Raises
     ------
     TypeError
-        If ``value`` is not a 1D NumPy Array.
+        If ``value`` is not a NumPy Array.
+    ValueError
+        If ``value`` is not a 1D Array.
     TypeError
         If the entries of ``value`` cannot be promoted to ``numpy.float64``.
     ValueError
