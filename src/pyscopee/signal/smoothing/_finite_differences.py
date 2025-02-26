@@ -585,11 +585,15 @@ def convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage(
     main_diagonal_index = 2 * order
     lapack_banded_data[main_diagonal_index, :] = squared_data[:, 0].copy()
 
+    # the workspace rows are filled with zeros
+    lapack_banded_data[0:order, ::] = 0.0
+
     # the sub- and super-diagonals are filled simultaneously
     for column_index in range(1, squared_data.shape[1]):
         values = squared_data[0 : num_points - column_index, column_index].copy()
 
         # super-diagonal
+        lapack_banded_data[main_diagonal_index - column_index, 0:column_index] = 0.0
         lapack_banded_data[
             main_diagonal_index - column_index, column_index:num_points
         ] = values
@@ -598,8 +602,63 @@ def convert_squared_cbr_finite_difference_matrix_to_lapack_lu_banded_storage(
         lapack_banded_data[
             main_diagonal_index + column_index, 0 : num_points - column_index
         ] = values
+        lapack_banded_data[
+            main_diagonal_index + column_index, num_points - column_index :
+        ] = 0.0
 
     return lapack_banded_data, order, order
+
+
+@jit(
+    "Tuple((float64[:,::1], int64, int64))(float64[:,::1], int64)",
+    nopython=True,
+    cache=True,
+)
+def convert_squared_cbr_finite_difference_matrix_to_row_major_banded_storage(
+    squared_data: NDArray[np.float64],
+    order: Literal[2, 4],
+) -> Tuple[NDArray[np.float64], int, int]:
+    """
+    TODO: add docstring
+
+    """
+
+    banded_data = np.empty(
+        shape=(squared_data.shape[0], 2 * order + 1),
+        dtype=np.float64,
+    )
+
+    # the main diagonal can be filled straight away
+    banded_data[:, order] = squared_data[:, 0].copy()
+
+    # the sub- and super-diagonals are filled simultaneously
+    for column_index in range(1, squared_data.shape[1]):
+        values = squared_data[
+            0 : squared_data.shape[0] - column_index, column_index
+        ].copy()
+
+        # super-diagonal
+        banded_data[
+            0 : squared_data.shape[0] - column_index,
+            order + column_index,
+        ] = values
+        banded_data[
+            squared_data.shape[0] - column_index :,
+            order + column_index,
+        ] = 0.0
+
+        # sub-diagonal
+        banded_data[
+            0:column_index,
+            order - column_index,
+        ] = 0.0
+
+        banded_data[
+            column_index : squared_data.shape[0],
+            order - column_index,
+        ] = values
+
+    return banded_data, order, order
 
 
 @jit(
@@ -658,7 +717,9 @@ if __name__ == "__main__":
         slogdet_lu_banded,
     )
 
-    NUM_POINTS = 10
+    np.set_printoptions(precision=3)
+
+    NUM_POINTS = 7
     ORDER = 2
 
     np.random.seed(0)
@@ -718,9 +779,20 @@ if __name__ == "__main__":
         )
     )
 
-    lapack_banded_data[2 * ORDER, ::] += 20.0
+    # lapack_banded_data[2 * ORDER, ::] += 20.0
 
     print(lapack_banded_data, end="\n\n")
+
+    row_major_banded_data, num_sub_diagonals, num_super_diagonals = (
+        convert_squared_cbr_finite_difference_matrix_to_row_major_banded_storage(
+            squared_data,
+            ORDER,
+        )
+    )
+
+    print(row_major_banded_data, end="\n\n")
+
+    raise ValueError
 
     b = np.random.randn(NUM_POINTS)
 
