@@ -12,17 +12,19 @@ This module provides functions for symmetrizing interferograms, e.g.,
 import numpy as np
 from numpy.typing import NDArray
 from scipy.optimize import Bounds, dual_annealing
-from scipy.signal import sosfilt, sosfilt_zi, ZoomFFT
+from scipy.signal import ZoomFFT, sosfilt, sosfilt_zi
 
 # === Auxiliary Functions ===
 
 
-def _make_allpass_filter_pole_bounds(
+def _make_allpass_correction_bounds(
     num_poles: int,
     max_modulus: float,
+    max_shift: float,
 ) -> Bounds:
     """
-    Sets up the bounds for the optimisation of the poles of an all-pass filter.
+    Sets up the bounds for the optimisation of the poles of an all-pass filter and the
+    shift of the signal.
     Please refer to the Notes section for further details.
 
     Parameters
@@ -30,16 +32,19 @@ def _make_allpass_filter_pole_bounds(
     num_poles : :obj:`int`
         The number of poles in the all-pass filter.
         It must be a positive integer ``> 0``.
-        Please refer to the Notes section for further details.
     max_modulus : :obj:`float`
         The maximum modulus of the poles of the all-pass filter to ensure stability.
-        It must be a positive float in the interval ``(0, 1)`` (both exclusive).
-        Please refer to the Notes section for further details.
+        It must be a positive float value in the interval ``(0, 1)`` (both exclusive).
+    max_shift : :obj:`float`
+        The maximum shift by which the signal is shifted after filtering it with the
+        all-pass filter.
+        It has to be a non-negative float value ``>= 0.0``.
 
     Returns
     -------
     bounds : :obj:`scipy.optimize.Bounds`
-        The bounds for the optimisation of the poles of an all-pass filter.
+        The bounds for the optimisation of the poles of the all-pass filter and the
+        shift of the signal.
 
     Notes
     -----
@@ -50,9 +55,9 @@ def _make_allpass_filter_pole_bounds(
     ``pole = modulus * exp(1j * angle)``. With this, one pole is represented by two
     variables, namely its modulus and angle.
 
-    However, the denominator and numerator of the all-pass filter both have real
-    polynomials coefficients, i.e., the poles appear in conjugate pairs. Consequently,
-    only half of the poles need to be optimised.
+    Yet, the denominator and numerator of the all-pass filter both have real polynomials
+    coefficients, i.e., the poles appear in conjugate pairs. Consequently, only half of
+    the poles need to be optimised.
 
     In total, this means that
 
@@ -72,22 +77,29 @@ def _make_allpass_filter_pole_bounds(
 
     for an odd number of poles. ``modulus_0`` is the modulus of the only real pole.
 
+    Finally, the bound for the signal shift is added to the end of the bounds as one
+    additional variable which yields
+
+    ``[(modulus_0), modulus_1, angle_1, modulus_2, angle_2, ..., shift]``
+
     """
 
     num_purely_real_poles = num_poles % 2
 
-    lower_bounds = np.empty(shape=(num_poles,), dtype=np.float64)
+    lower_bounds = np.empty(shape=(num_poles + 1,), dtype=np.float64)
     upper_bounds = np.empty_like(lower_bounds)
 
     # NOTE: the indexing for the purely real poles will not take any effect if there is
     #       no purely real pole
     lower_bounds[0:num_purely_real_poles] = -max_modulus
-    lower_bounds[num_purely_real_poles::2] = -max_modulus
-    lower_bounds[num_purely_real_poles + 1 :: 2] = 0.0
+    lower_bounds[num_purely_real_poles:num_poles:2] = -max_modulus
+    lower_bounds[num_purely_real_poles + 1 : num_poles : 2] = 0.0
+    lower_bounds[num_poles] = 0.0
 
     upper_bounds[0:num_purely_real_poles] = max_modulus
-    upper_bounds[num_purely_real_poles::2] = max_modulus
-    upper_bounds[num_purely_real_poles + 1 :: 2] = np.pi
+    upper_bounds[num_purely_real_poles:num_poles:2] = max_modulus
+    upper_bounds[num_purely_real_poles + 1 : num_poles : 2] = np.pi
+    upper_bounds[num_poles] = max_shift
 
     return Bounds(
         lb=lower_bounds,  # type: ignore
@@ -95,7 +107,7 @@ def _make_allpass_filter_pole_bounds(
     )
 
 
-def _make_allpass_filter_sos(
+def _convert_allpass_poles_to_sos(
     pole_params: NDArray[np.float64],
 ) -> NDArray[np.float64]:
     """
@@ -103,17 +115,17 @@ def _make_allpass_filter_sos(
 
     Parameters
     ----------
-    pole_params : :obj:`numpy.ndarray` of shape ``(num_poles,)`` and dtype :obj:`numpy.float64`
+    pole_params : :obj:`numpy.ndarray` of shape ``(num_poles,)`` and dtype ``numpy.float64``
         The parameters of the poles of the all-pass filter.
         For further details, please refer to the documentation of the function
-        :func:`_calc_imag_fraction_after_allpass_filter`.
+        :func:`_calc_average_phase_error_after_allpass_correction`.
 
     Returns
     -------
-    sos_coeffs : :obj:`numpy.ndarray` of shape ``(half_num_poles, 6)`` and dtype :obj:`numpy.float64`
+    sos_coeffs : :obj:`numpy.ndarray` of shape ``(half_num_poles, 6)`` and dtype ``numpy.float64``
         The second-order sections (SOS) of the all-pass filter.
 
-    """
+    """  # noqa: E501
 
     half_num_poles = pole_params.size // 2
     num_purely_real_poles = half_num_poles % 2
@@ -149,21 +161,82 @@ def _make_allpass_filter_sos(
     return sos_coeffs
 
 
-def _calc_average_phase_error_after_allpass(
-    pole_params: 
-)
+def _calc_average_phase_error_after_allpass_correction(
+    correction_params: NDArray[np.float64],
+    signal: NDArray[np.float64],
+    pre_shift: int,
+    frequency_indices: slice,
+    angular_frequencies: NDArray[np.float64],
+) -> float:
+    """
+    Calculates the average phase error of a signal after applying an all-pass filter
+    correction that involves filtering the signal with an all-pass filter and shifting
+    it.
+
+    Parameters
+    ----------
+    correction_params : :obj:`numpy.ndarray` of shape ``(num_poles + 1,)`` and dtype ``numpy.float64``
+        The parameters of the all-pass filter correction.
+        Except for the last element, its elements encode the parameters of the poles of
+        the all-pass filter in the form ``[(modulus_0), modulus_1, angle_1, modulus_2, angle_2, ...]``
+        for the polar representation of the poles ``pole_i = modulus_i * exp(1j * angle_i)``.
+        An even number of poles will result in only complex conjugate pairs of poles
+        while an odd number of poles will result in pairs of complex conjugate poles
+        and one additional purely real pole.
+        The last element encodes the shift by which the signal is shifted after
+        filtering it with the all-pass filter.
+    signal : :obj:`numpy.ndarray` of shape ``(num_samples,)`` and dtype ``numpy.float64``
+        The signal to be corrected.
+    pre_shift : :obj:`int`
+        The pre-shift by which the signal is shifted after filtering it with the
+        all-pass filter and before applying the shift given by ``correction_params[1]``.
+        Note that it can only be a negative of positive integer value while
+        ``correction_params[-1]`` has to be a positive float value.
+        This can be helpful in case the all-pass filter and the shift have to work on
+        differently centered signals.
+    frequency_indices : :obj:`slice`
+        The indices of the frequencies at which the phase error is calculated in the
+        frequency domain.
+    angular_frequencies : :obj:`numpy.ndarray` of shape ``(num_samples,)
+        The angular frequencies of the signal corresponding to ``frequency_indices``.
+
+    Returns
+    -------
+    average_phase_error : :obj:`float`
+        The average phase error of the signal after applying the all-pass filter
+        correction.
+
+    """  # noqa: E501
+
+    shift, pole_params = correction_params[0], correction_params[1:]
+    sos = _convert_allpass_poles_to_sos(pole_params=pole_params)
+
+    signal, _ = sosfilt(
+        sos=sos,
+        x=signal,
+        zi=sosfilt_zi(sos=sos),
+    )
+
+    filtered_fft = np.fft.rfft(
+        np.roll(
+            signal,
+            shift=pre_shift,
+        ),
+    )[frequency_indices]
+
+    filtered_fft *= np.exp(-1.0j * angular_frequencies * shift)
+
+    return np.mean(np.abs(np.angle(filtered_fft)))
 
 
-
-
-bounds = _make_allpass_filter_pole_bounds(199, 0.995)
+bounds = _make_allpass_correction_bounds(199, 0.995, 0.5)
 poles = np.array(
     [
         np.random.uniform(bounds.lb[index], bounds.ub[index])
-        for index in range(0, len(bounds.lb))
+        for index in range(0, len(bounds.lb - 1))
     ]
 )
-sos = _make_allpass_filter_sos(poles)
+sos = _convert_allpass_poles_to_sos(poles)
 
 from matplotlib import pyplot as plt
 from scipy.signal import sosfreqz
