@@ -11,8 +11,10 @@ This module provides functions for symmetrizing interferograms, e.g.,
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.optimize import Bounds, dual_annealing
+from scipy.optimize import Bounds
 from scipy.signal import sosfilt, sosfilt_zi
+
+from pyscopee._utils import jit
 
 # === Auxiliary Functions ===
 
@@ -107,6 +109,11 @@ def _make_allpass_correction_bounds(
     )
 
 
+@jit(
+    "float64[:, ::1](float64[::1])",
+    nopython=True,
+    cache=True,
+)
 def _convert_allpass_poles_to_sos(
     pole_params: NDArray[np.float64],
 ) -> NDArray[np.float64]:
@@ -228,6 +235,25 @@ def _calc_average_phase_error_after_allpass_correction(
     shift = correction_params[correction_params.size - 1]
     sos = _convert_allpass_poles_to_sos(pole_params=pole_params)
 
+    inital_parameters = sosfilt_zi(sos=sos)
+
+    # the initial conditions are set to the mean values of the signal to ensure that the
+    # filter have a smooth start
+    # NOTE: each section is represented as one layer of a 3D array which have one row
+    #       per signal and two column; the following reshaping enables broadcasting
+    #       of the mean values to the initial conditions by making sure that each row
+    #       of the 3D initial conditions array is multiplied by the corresponding mean
+    mean_values = np.repeat(
+        np.mean(signal[0:some_index], axis=1).reshape((1, -1, 1)),
+        repeats=2,
+        axis=2,
+    )
+    inital_parameters = mean_values * np.repeat(
+        np.expand_dims(inital_parameters, axis=1),
+        repeats=1,
+        axis=1,
+    )
+
     signal, _ = sosfilt(
         sos=sos,
         x=signal,
@@ -246,37 +272,3 @@ def _calc_average_phase_error_after_allpass_correction(
     filtered_fft *= np.exp(-1.0j * angular_frequencies * shift)
 
     return np.mean(np.abs(np.angle(filtered_fft)))
-
-
-# np.random.seed(0)
-from matplotlib import pyplot as plt
-from scipy.signal import sos2zpk, sosfreqz
-
-NUM_POLES = 200
-
-fig, ax = plt.subplots(nrows=2)
-
-for _ in range(100):
-    bounds = _make_allpass_correction_bounds(NUM_POLES, 0.995, 0.5)
-    poles = np.array(
-        [
-            np.random.uniform(bounds.lb[index], bounds.ub[index])
-            for index in range(0, len(bounds.lb) - 1)
-        ]
-    )
-    sos = _convert_allpass_poles_to_sos(poles)
-
-    z, p, k = sos2zpk(sos)
-    print(np.abs(p))
-    assert np.all(np.abs(p) <= 1.0)
-
-    w, h = sosfreqz(sos, worN=8000)
-
-    ax[0].plot(w, np.abs(h))
-
-    ax[1].plot(w, np.unwrap(np.angle(h)))
-
-ax[1].scatter(0, 0, color="red", marker="x")
-ax[1].scatter(np.pi, -NUM_POLES * np.pi, color="red", marker="x")
-
-plt.show()
